@@ -1,29 +1,58 @@
 import { NextRequest, NextResponse } from "next/server";
-import * as fs from "fs";
-import * as path from "path";
-import { Curriculum } from "@/types";
+import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { createAdminClient } from "@/lib/supabase";
+import Anthropic from "@anthropic-ai/sdk";
 
 export async function GET(req: NextRequest) {
-  const userId = req.nextUrl.searchParams.get("userId");
-  const dir = path.join(process.cwd(), "src/data/curricula");
-  const files = fs.readdirSync(dir).filter((f) => f.startsWith(userId!));
-  if (files.length === 0) return NextResponse.json({ error: "not found" }, { status: 404 });
-  const curriculum = JSON.parse(fs.readFileSync(path.join(dir, files[0]), "utf-8"));
-  return NextResponse.json(curriculum);
+  try {
+    const supabase = await createSupabaseServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
+    const { data, error } = await createAdminClient()
+      .from("curricula")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .single();
+
+    if (error || !data) return NextResponse.json({ error: "not found" }, { status: 404 });
+    return NextResponse.json({
+      ...data,
+      topics: data.topics,
+      adjustmentHistory: data.adjustment_history,
+      totalTopics: data.total_topics,
+      userId: data.user_id,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+    });
+  } catch (e: unknown) {
+    return NextResponse.json({ error: String(e) }, { status: 500 });
+  }
 }
 
 export async function POST(req: NextRequest) {
-  const { userId, feedback } = await req.json();
+  try {
+    const supabase = await createSupabaseServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
-  const dir = path.join(process.cwd(), "src/data/curricula");
-  const files = fs.readdirSync(dir).filter((f) => f.startsWith(userId));
-  const curriculumPath = path.join(dir, files[0]);
-  const curriculum: Curriculum = JSON.parse(fs.readFileSync(curriculumPath, "utf-8"));
+    const { feedback } = await req.json();
+    const admin = createAdminClient();
 
-  const Anthropic = (await import("@anthropic-ai/sdk")).default;
-  const client = new Anthropic();
+    const { data: curriculum, error } = await admin
+      .from("curricula")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .single();
 
-  const prompt = `아래는 현재 커리큘럼이에요.
+    if (error || !curriculum) return NextResponse.json({ error: "curriculum not found" }, { status: 404 });
+
+    const client = new Anthropic();
+    const prompt = `아래는 현재 커리큘럼이에요.
 ${JSON.stringify(curriculum.topics, null, 2)}
 
 사용자 피드백: "${feedback}"
@@ -33,29 +62,52 @@ ${JSON.stringify(curriculum.topics, null, 2)}
   "topics": [ ... ]
 }`;
 
-  const message = await client.messages.create({
-    model: "claude-sonnet-4-5",
-    max_tokens: 2000,
-    messages: [{ role: "user", content: prompt }],
-  });
+    const message = await client.messages.create({
+      model: "claude-sonnet-4-5",
+      max_tokens: 2000,
+      messages: [{ role: "user", content: prompt }],
+    });
 
-  const text = message.content[0].type === "text" ? message.content[0].text : "";
-  let topics;
-  try {
-    topics = JSON.parse(text).topics;
-  } catch {
-    const match = text.match(/```json\n?([\s\S]*?)\n?```/);
-    topics = JSON.parse(match![1]).topics;
+    const text = message.content[0].type === "text" ? message.content[0].text : "";
+    let topics;
+    try {
+      topics = JSON.parse(text).topics;
+    } catch {
+      const match = text.match(/```json\n?([\s\S]*?)\n?```/);
+      if (!match) return NextResponse.json({ error: "파싱 실패: " + text }, { status: 500 });
+      topics = JSON.parse(match[1]).topics;
+    }
+
+    if (!topics) return NextResponse.json({ error: "토픽 생성 실패" }, { status: 500 });
+
+    const adjustmentHistory = [
+      ...(curriculum.adjustment_history || []),
+      { date: new Date().toISOString(), reason: `사용자 피드백: ${feedback}` },
+    ];
+
+    const { data: updated, error: updateError } = await admin
+      .from("curricula")
+      .update({
+        topics,
+        total_topics: topics.length,
+        updated_at: new Date().toISOString(),
+        adjustment_history: adjustmentHistory,
+      })
+      .eq("id", curriculum.id)
+      .select()
+      .single();
+
+    if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
+    return NextResponse.json({
+      ...updated,
+      topics: updated.topics,
+      adjustmentHistory: updated.adjustment_history,
+      totalTopics: updated.total_topics,
+      userId: updated.user_id,
+      createdAt: updated.created_at,
+      updatedAt: updated.updated_at,
+    });
+  } catch (e: unknown) {
+    return NextResponse.json({ error: String(e) }, { status: 500 });
   }
-
-  curriculum.topics = topics;
-  curriculum.totalTopics = topics.length;
-  curriculum.updatedAt = new Date().toISOString();
-  curriculum.adjustmentHistory.push({
-    date: new Date().toISOString(),
-    reason: `사용자 피드백: ${feedback}`,
-  });
-
-  fs.writeFileSync(curriculumPath, JSON.stringify(curriculum, null, 2));
-  return NextResponse.json(curriculum);
 }

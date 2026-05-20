@@ -1,13 +1,11 @@
 "use client";
 import { useEffect, useState } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { Suspense } from "react";
 import { Curriculum } from "@/types";
 
 function CurriculumContent() {
-  const searchParams = useSearchParams();
   const router = useRouter();
-  const userId = searchParams.get("userId");
 
   const [curriculum, setCurriculum] = useState<Curriculum | null>(null);
   const [feedback, setFeedback] = useState("");
@@ -15,22 +13,21 @@ function CurriculumContent() {
   const [refining, setRefining] = useState(false);
 
   useEffect(() => {
-    if (!userId) return;
-    fetch(`/api/curriculum?userId=${userId}`)
+    fetch("/api/curriculum")
       .then((r) => r.json())
       .then((data) => {
         setCurriculum(data);
         setLoading(false);
       });
-  }, [userId]);
+  }, []);
 
   async function handleFeedback() {
-    if (!feedback.trim() || !userId) return;
+    if (!feedback.trim()) return;
     setRefining(true);
     const res = await fetch("/api/curriculum", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId, feedback }),
+      body: JSON.stringify({ feedback }),
     });
     const data = await res.json();
     setCurriculum(data);
@@ -39,7 +36,7 @@ function CurriculumContent() {
   }
 
   async function handleConfirm() {
-    router.push(`/worksheet?userId=${userId}`);
+    router.push("/worksheet");
   }
 
   if (loading) {

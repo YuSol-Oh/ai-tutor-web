@@ -7,11 +7,11 @@ import { Worksheet, Question } from "@/types";
 function QuestionCard({
   question,
   index,
-  userId,
+  worksheetId,
 }: {
   question: Question;
   index: number;
-  userId: string;
+  worksheetId: string;
 }) {
   const [selectedAnswer, setSelectedAnswer] = useState("");
   const [textAnswer, setTextAnswer] = useState("");
@@ -30,7 +30,7 @@ function QuestionCard({
     const res = await fetch("/api/worksheet", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId, questionId: question.questionId, answer }),
+      body: JSON.stringify({ worksheetId, questionId: question.questionId, answer }),
     });
     const data = await res.json();
     setResult(data);
@@ -145,14 +145,23 @@ function WorksheetContent() {
   const [allDone, setAllDone] = useState(false);
 
   useEffect(() => {
-    if (!userId) return;
-    fetch(`/api/worksheet?userId=${userId}`)
+    fetch("/api/worksheet")
       .then((r) => r.json())
       .then((data) => {
         setWorksheet(data);
         setLoading(false);
       });
-  }, [userId]);
+  }, []);
+
+  async function handleComplete() {
+    const res = await fetch("/api/complete", { method: "POST" });
+    const data = await res.json();
+    if (data.isCompleted) {
+      setAllDone(true);
+    } else {
+      setAllDone(true);
+    }
+  }
 
   if (loading) {
     return (
@@ -169,10 +178,16 @@ function WorksheetContent() {
   if (allDone) {
     return (
       <main className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
+        <div className="text-center px-4">
           <div className="text-5xl mb-4">🎉</div>
           <h1 className="text-2xl font-bold text-gray-900 mb-2">오늘 학습 완료!</h1>
-          <p className="text-gray-500">내일 다음 토픽이 준비될 거예요.</p>
+          <p className="text-gray-500 mb-6">수고하셨어요. 꾸준히 하면 반드시 성장해요!</p>
+          <a
+            href="/"
+            className="inline-block bg-blue-600 text-white px-8 py-3 rounded-xl font-medium hover:bg-blue-700 transition-colors"
+          >
+            홈으로 돌아가기
+          </a>
         </div>
       </main>
     );
@@ -206,7 +221,7 @@ function WorksheetContent() {
         {/* 문제 파트 */}
         <h2 className="font-semibold text-gray-900 mb-3">✏️ 확인 문제</h2>
         {worksheet?.questions.map((q, i) => (
-          <QuestionCard key={q.questionId} question={q} index={i} userId={userId!} />
+          <QuestionCard key={q.questionId} question={q} index={i} worksheetId={(worksheet as Worksheet & { id: string }).id} />
         ))}
 
         {/* 실습 파트 */}
@@ -229,7 +244,7 @@ function WorksheetContent() {
 
         {/* 완료 버튼 */}
         <button
-          onClick={() => setAllDone(true)}
+          onClick={handleComplete}
           className="w-full bg-green-600 text-white py-4 rounded-xl text-lg font-medium hover:bg-green-700 transition-colors"
         >
           오늘 학습 완료! 🎉
