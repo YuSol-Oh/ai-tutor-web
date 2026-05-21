@@ -1,32 +1,376 @@
 "use client";
+
 import { useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
-import { Suspense } from "react";
-import { Worksheet, Question } from "@/types";
+import { useRouter } from "next/navigation";
+import ReactMarkdown from "react-markdown";
+import { Worksheet, Question, HandsOnTask } from "@/types";
+
+// ─── Extended API type ────────────────────────────────────────────────────────
+
+interface WorksheetData extends Worksheet {
+  id: string;
+}
+
+// ─── Icons ────────────────────────────────────────────────────────────────────
+
+function IBack(p: React.SVGProps<SVGSVGElement>) {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M15 18l-6-6 6-6"/></svg>;
+}
+function ISpark(p: React.SVGProps<SVGSVGElement>) {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5L18 18M6 18l2.5-2.5M15.5 8.5L18 6"/></svg>;
+}
+function IBulb(p: React.SVGProps<SVGSVGElement>) {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.7.7 1 1.5 1 2.5h6c0-1 .3-1.8 1-2.5A6 6 0 0 0 12 3z"/></svg>;
+}
+function ICheck(p: React.SVGProps<SVGSVGElement>) {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M5 12.5l4.5 4.5L19 7"/></svg>;
+}
+function IX(p: React.SVGProps<SVGSVGElement>) {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M6 6l12 12M18 6L6 18"/></svg>;
+}
+function IArrow(p: React.SVGProps<SVGSVGElement>) {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M5 12h14M13 6l6 6-6 6"/></svg>;
+}
+function IChevron(p: React.SVGProps<SVGSVGElement>) {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M6 9l6 6 6-6"/></svg>;
+}
+function IClip(p: React.SVGProps<SVGSVGElement>) {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M21 12.5l-8.5 8.5a5.5 5.5 0 1 1-7.8-7.8L13 5a3.7 3.7 0 0 1 5.2 5.2l-8.6 8.6a1.9 1.9 0 1 1-2.7-2.7l7.7-7.7"/></svg>;
+}
+
+// ─── Atoms ────────────────────────────────────────────────────────────────────
+
+type BadgeTone = "ink" | "brand" | "amber" | "emerald" | "rose";
+
+function Badge({ tone = "ink", children }: { tone?: BadgeTone; children: React.ReactNode }) {
+  const tones: Record<BadgeTone, string> = {
+    ink:     "bg-ink-100 text-ink-700 border-ink-200",
+    brand:   "bg-brand-50 text-brand-700 border-brand-100",
+    amber:   "bg-amber-50 text-amber-700 border-amber-200",
+    emerald: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    rose:    "bg-rose-50 text-rose-700 border-rose-200",
+  };
+  return (
+    <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border whitespace-nowrap shrink-0 ${tones[tone]}`}>
+      {children}
+    </span>
+  );
+}
+
+function Avatar({ size = 28 }: { size?: number }) {
+  return (
+    <div style={{ width: size, height: size }} className="rounded-full bg-gradient-to-br from-brand-500 to-brand-700 flex items-center justify-center text-white shadow-soft shrink-0">
+      <ISpark className="w-3.5 h-3.5" />
+    </div>
+  );
+}
+
+function Skel({ w = "100%", h = 12, className = "" }: { w?: string | number; h?: number; className?: string }) {
+  return (
+    <div
+      className={`rounded-md bg-ink-100 animate-pulse-soft ${className}`}
+      style={{ width: typeof w === "number" ? `${w}px` : w, height: h }}
+    />
+  );
+}
+
+function typeLabel(type: Question["type"]) {
+  return type === "multiple-choice" ? "객관식" : type === "short-answer" ? "단답형" : "서술형";
+}
+
+// ─── Header ──────────────────────────────────────────────────────────────────
+
+function Header({
+  worksheet,
+  loading,
+  answeredCount,
+}: {
+  worksheet: WorksheetData | null;
+  loading: boolean;
+  answeredCount: number;
+}) {
+  const totalQ = worksheet?.questions.length ?? 0;
+  const progressPct = totalQ > 0 ? Math.round((answeredCount / totalQ) * 100) : 0;
+
+  return (
+    <header className="shrink-0 border-b border-ink-200 bg-white/90 backdrop-blur z-10">
+      <div className="flex items-center gap-3 px-8 h-16">
+        <a href="/dashboard" className="w-9 h-9 rounded-full hover:bg-ink-100 text-ink-700 flex items-center justify-center">
+          <IBack className="w-5 h-5" />
+        </a>
+        <div className="flex-1 min-w-0 flex items-center gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-[15.5px] font-semibold text-ink-900 truncate">
+                {loading ? "학습지 준비 중..." : (worksheet?.topicTitle ?? "오늘의 학습")}
+              </span>
+              {!loading && <Badge tone="brand">학습 중</Badge>}
+            </div>
+            <div className="text-[12px] text-ink-500 mt-0.5 truncate">
+              {loading ? "AI가 맞춤 문제를 만들고 있어요" : `문제 ${totalQ}개 · 예상 학습 시간 ${worksheet?.questions.length ? worksheet.questions.length * 5 : 20}분`}
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <button className="h-9 px-3 rounded-lg text-[13px] font-medium text-ink-700 hover:bg-ink-100 transition whitespace-nowrap shrink-0">건너뛰기</button>
+          <div className="flex items-center gap-2 pl-3 border-l border-ink-200 h-8 shrink-0">
+            <Avatar size={28} />
+            <span className="text-[12.5px] text-ink-700 font-medium whitespace-nowrap">AI 튜터</span>
+          </div>
+        </div>
+      </div>
+      <div className="px-8 pb-3">
+        {loading ? (
+          <div className="flex items-center gap-3">
+            <div className="flex-1 h-1.5 rounded-full bg-ink-100 overflow-hidden">
+              <div className="h-full w-[64%] bg-gradient-to-r from-brand-500 to-brand-700 rounded-full animate-pulse-soft" />
+            </div>
+            <span className="text-[12px] font-medium text-ink-500 whitespace-nowrap shrink-0 flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-brand-500 animate-pulse shrink-0" />
+              AI가 학습지를 준비하는 중이에요…
+            </span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-3">
+            <div className="flex-1 h-1.5 rounded-full bg-ink-100 overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-brand-500 to-brand-700 rounded-full transition-all duration-500"
+                style={{ width: `${Math.max(progressPct, 8)}%` }}
+              />
+            </div>
+            <span className="text-[12px] font-medium text-ink-500 tabular-nums whitespace-nowrap shrink-0">
+              진행률 {progressPct}% · 문제 {answeredCount}/{totalQ}
+            </span>
+          </div>
+        )}
+      </div>
+    </header>
+  );
+}
+
+// ─── Left Panel ──────────────────────────────────────────────────────────────
+
+function LeftPanelSkeleton() {
+  return (
+    <div className="px-9 py-8 space-y-6">
+      <div className="space-y-3">
+        <Skel w={80} h={12} />
+        <Skel w="75%" h={28} />
+        <Skel w="55%" h={14} />
+      </div>
+      <div className="space-y-3 mt-8">
+        <Skel w={100} h={16} />
+        {[90, 82, 88, 76].map((w, i) => <Skel key={i} w={`${w}%`} h={13} />)}
+      </div>
+      <div className="rounded-2xl bg-brand-50 border border-brand-100 p-5 space-y-2">
+        <Skel w={120} h={14} />
+        {[88, 72].map((w, i) => <Skel key={i} w={`${w}%`} h={12} />)}
+      </div>
+    </div>
+  );
+}
+
+function LeftPanel({ worksheet }: { worksheet: WorksheetData | null }) {
+  return (
+    <aside className="w-[40%] shrink-0 border-r border-ink-200 bg-white overflow-y-auto">
+      {!worksheet ? (
+        <LeftPanelSkeleton />
+      ) : (
+        <div className="px-9 py-8">
+          {/* topic header */}
+          <div className="flex items-center gap-2 text-[12px] font-semibold text-brand-600 whitespace-nowrap">
+            <span className="tracking-wide uppercase">오늘의 학습</span>
+          </div>
+          <h1 className="mt-3 text-[28px] leading-tight font-bold text-ink-900 tracking-tight">
+            {worksheet.topicTitle}
+          </h1>
+
+          {/* core concept */}
+          <section className="mt-8">
+            <h2 className="text-[15px] font-bold text-ink-900 flex items-center gap-2 whitespace-nowrap">
+              <span className="w-1 h-4 rounded-full bg-brand-600 shrink-0" />
+              <span>핵심 개념</span>
+            </h2>
+            <div className="mt-3 prose prose-sm max-w-none text-ink-700 [&_strong]:text-ink-900 [&_code]:text-brand-700 [&_code]:bg-brand-50 [&_code]:px-1 [&_code]:rounded">
+              <ReactMarkdown>{worksheet.conceptSummary}</ReactMarkdown>
+            </div>
+          </section>
+
+          {/* real world example */}
+          <section className="mt-8">
+            <div className="rounded-2xl bg-brand-50 border border-brand-100 p-5">
+              <div className="flex items-center gap-2 text-[12px] font-semibold text-brand-700 whitespace-nowrap">
+                <span className="w-5 h-5 rounded-md bg-brand-600 text-white flex items-center justify-center text-[11px] shrink-0">예</span>
+                <span>실무 예시</span>
+              </div>
+              <div className="mt-2 text-[13px] text-brand-900/80 leading-relaxed prose prose-sm max-w-none [&_pre]:bg-white/80 [&_pre]:border [&_pre]:border-brand-100 [&_pre]:rounded-lg [&_pre]:p-3 [&_pre]:text-[12px] [&_code]:text-brand-700 [&_strong]:text-brand-900">
+                <ReactMarkdown>{worksheet.realWorldExample}</ReactMarkdown>
+              </div>
+            </div>
+          </section>
+        </div>
+      )}
+    </aside>
+  );
+}
+
+// ─── Loading Right ────────────────────────────────────────────────────────────
+
+function LoadingRight() {
+  return (
+    <main className="flex-1 bg-ink-50/60 overflow-y-auto">
+      <div className="px-10 py-8 space-y-6">
+        {/* generation banner */}
+        <div className="rounded-2xl border border-brand-100 bg-white p-5 shadow-soft">
+          <div className="flex items-start gap-3">
+            <div className="relative">
+              <Avatar size={36} />
+              <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 border-2 border-white animate-pulse" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[14px] font-semibold text-ink-900 whitespace-nowrap">AI 튜터</span>
+                <Badge tone="brand">생성 중</Badge>
+              </div>
+              <p className="mt-1 text-[13px] text-ink-600 leading-relaxed">
+                학습 내용을 바탕으로 <b className="text-ink-900">맞춤 문제</b>와 <b className="text-ink-900">실습 과제</b>를 준비하고 있어요.
+              </p>
+              <div className="mt-3 grid grid-cols-3 gap-2">
+                {[
+                  ["핵심 개념 정리", true],
+                  ["문제 생성", "active"],
+                  ["실습 과제 구성", false],
+                ].map(([t, s]) => (
+                  <div key={String(t)} className={`flex items-center gap-2 px-2.5 py-2 rounded-lg border text-[12px] min-w-0
+                    ${s === true ? "bg-emerald-50 border-emerald-200 text-emerald-700"
+                      : s === "active" ? "bg-brand-50 border-brand-200 text-brand-700"
+                      : "bg-white border-ink-200 text-ink-400"}`}
+                  >
+                    {s === true
+                      ? <ICheck className="w-3.5 h-3.5 shrink-0" />
+                      : s === "active"
+                      ? <span className="w-3.5 h-3.5 rounded-full border-2 border-brand-500 border-t-transparent animate-spin shrink-0" />
+                      : <span className="w-3.5 h-3.5 rounded-full border-2 border-ink-200 shrink-0" />
+                    }
+                    <span className="font-medium truncate">{String(t)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* skeleton question card */}
+        <div className="rounded-2xl border border-ink-200 bg-white p-6 shadow-soft">
+          <div className="flex items-center gap-2">
+            <Skel w={64} h={20} /><Skel w={56} h={20} />
+          </div>
+          <div className="mt-5 space-y-2.5">
+            <Skel w="92%" h={14} /><Skel w="78%" h={14} />
+          </div>
+          <div className="mt-6 space-y-2.5">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="flex items-center gap-3 p-3.5 rounded-xl border border-ink-200">
+                <div className="w-6 h-6 rounded-full bg-ink-100 shrink-0" />
+                <Skel w={`${60 + (i % 3) * 10}%`} h={12} />
+              </div>
+            ))}
+          </div>
+          <div className="mt-6 flex items-center justify-between">
+            <Skel w={100} h={32} /><Skel w={120} h={36} />
+          </div>
+        </div>
+
+        {/* skeleton task */}
+        <div className="rounded-2xl border border-ink-200 bg-white p-5 shadow-soft">
+          <div className="flex items-center justify-between">
+            <Skel w={180} h={16} /><Skel w={20} h={16} />
+          </div>
+          <div className="mt-3 space-y-2">
+            <Skel w="90%" h={12} /><Skel w="60%" h={12} />
+          </div>
+        </div>
+
+        <div className="text-center text-[12px] text-ink-400 pb-2">
+          평균 8–12초 정도 소요돼요. 잠시만 기다려주세요.
+        </div>
+      </div>
+    </main>
+  );
+}
+
+// ─── MCQ Option ───────────────────────────────────────────────────────────────
+
+function MCOption({
+  opt, qState, selected, onSelect, correctAnswer,
+}: {
+  opt: { id: string; text: string };
+  qState: "idle" | "answered";
+  selected: string;
+  onSelect: (id: string) => void;
+  correctAnswer: string;
+}) {
+  const isSelected = selected === opt.id;
+  const isCorrect  = opt.id === correctAnswer;
+
+  let cls      = "border-ink-200 hover:border-brand-300 hover:bg-brand-50/40";
+  let badgeCls = "bg-ink-100 text-ink-700";
+
+  if (qState === "idle" && isSelected) {
+    cls      = "border-brand-500 bg-brand-50 ring-2 ring-brand-100";
+    badgeCls = "bg-brand-600 text-white";
+  } else if (qState === "answered") {
+    if (isCorrect) {
+      cls      = "border-emerald-300 bg-emerald-50";
+      badgeCls = "bg-emerald-600 text-white";
+    } else if (isSelected) {
+      cls      = "border-rose-300 bg-rose-50";
+      badgeCls = "bg-rose-600 text-white";
+    } else {
+      cls = "border-ink-200 opacity-70";
+    }
+  }
+
+  return (
+    <button
+      onClick={() => qState === "idle" && onSelect(opt.id)}
+      disabled={qState === "answered"}
+      className={`w-full text-left flex items-start gap-3.5 p-4 rounded-xl border-2 transition-all ${cls}`}
+    >
+      <span className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-[12px] font-bold uppercase ${badgeCls}`}>
+        {opt.id}
+      </span>
+      <span className="text-[14px] text-ink-900 leading-relaxed pt-0.5">{opt.text}</span>
+      {qState === "answered" && isCorrect && <ICheck className="ml-auto w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />}
+      {qState === "answered" && isSelected && !isCorrect && <IX className="ml-auto w-5 h-5 text-rose-600 shrink-0 mt-0.5" />}
+    </button>
+  );
+}
+
+// ─── Question Card ────────────────────────────────────────────────────────────
 
 function QuestionCard({
-  question,
-  index,
-  worksheetId,
+  question, index, total, worksheetId, onAnswered,
 }: {
   question: Question;
   index: number;
+  total: number;
   worksheetId: string;
+  onAnswered: () => void;
 }) {
-  const [selectedAnswer, setSelectedAnswer] = useState("");
-  const [textAnswer, setTextAnswer] = useState("");
-  const [hintsShown, setHintsShown] = useState(0);
-  const [result, setResult] = useState<{
-    isCorrect: boolean;
-    correctAnswer: string;
-    explanation: string;
-  } | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [selected, setSelected]   = useState("");
+  const [textAns, setTextAns]     = useState("");
+  const [qState, setQState]       = useState<"idle" | "answered">("idle");
+  const [hintsUsed, setHintsUsed] = useState(0);
+  const [submitting, setSubmitting] = useState(false);
+  const [result, setResult] = useState<{ isCorrect: boolean; correctAnswer: string; explanation: string } | null>(null);
+
+  const answer = question.type === "multiple-choice" ? selected : textAns;
+  const canSubmit = answer.trim().length > 0 && !submitting;
 
   async function handleSubmit() {
-    const answer = question.type === "multiple-choice" ? selectedAnswer : textAnswer;
-    if (!answer) return;
-    setLoading(true);
+    if (!canSubmit) return;
+    setSubmitting(true);
     const res = await fetch("/api/worksheet", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -34,230 +378,378 @@ function QuestionCard({
     });
     const data = await res.json();
     setResult(data);
-    setLoading(false);
+    setQState("answered");
+    setSubmitting(false);
+    onAnswered();
   }
 
-  function showNextHint() {
-    if (hintsShown < 3) setHintsShown((h) => h + 1);
+  function handleRetry() {
+    setQState("idle");
+    setSelected("");
+    setTextAns("");
+    setResult(null);
   }
+
+  function showHint() {
+    if (hintsUsed < 3) setHintsUsed((h) => h + 1);
+  }
+
+  const currentHint = hintsUsed > 0 ? question.hints[hintsUsed - 1] : null;
 
   return (
-    <div className="bg-white rounded-2xl p-6 shadow-sm mb-4">
-      <div className="flex items-center gap-2 mb-4">
-        <span className="bg-blue-100 text-blue-700 text-sm font-medium px-2.5 py-0.5 rounded-full">
-          문제 {index + 1}
-        </span>
-        <span className="text-xs text-gray-400">
-          {question.type === "multiple-choice" ? "객관식" : question.type === "short-answer" ? "단답형" : "서술형"}
-        </span>
+    <article className="rounded-2xl border border-ink-200 bg-white p-7 shadow-soft">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-brand-600 text-white text-[13px] font-bold shrink-0">
+            {index + 1}
+          </span>
+          <Badge tone="brand">{typeLabel(question.type)}</Badge>
+        </div>
+        <span className="text-[12px] text-ink-400 font-medium whitespace-nowrap">문제 {index + 1} / {total}</span>
       </div>
 
-      <p className="text-gray-900 font-medium mb-4">{question.text}</p>
+      <h3 className="mt-5 text-[18px] font-bold text-ink-900 leading-snug tracking-tight">
+        {question.text}
+      </h3>
 
-      {/* 객관식 보기 */}
-      {question.type === "multiple-choice" && question.choices && !result && (
-        <div className="space-y-2 mb-4">
-          {question.choices.map((choice) => (
-            <button
-              key={choice.id}
-              onClick={() => setSelectedAnswer(choice.id)}
-              className={`w-full text-left px-4 py-3 rounded-lg border transition-colors ${
-                selectedAnswer === choice.id
-                  ? "border-blue-500 bg-blue-50 text-blue-700"
-                  : "border-gray-200 hover:border-gray-300 text-gray-700"
-              }`}
-            >
-              <span className="font-medium mr-2">{choice.id.toUpperCase()}.</span>
-              {choice.text}
-            </button>
+      {/* hint bubble */}
+      {currentHint && (
+        <div className="mt-5 flex gap-3 items-start">
+          <div className="w-7 h-7 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+            <IBulb className="w-4 h-4" />
+          </div>
+          <div className="flex-1 rounded-2xl rounded-tl-md bg-amber-50 border border-amber-200 px-4 py-3">
+            <div className="text-[11.5px] font-bold text-amber-800 uppercase tracking-wide">힌트 {hintsUsed}</div>
+            <p className="mt-1 text-[13.5px] text-amber-900 leading-relaxed">{currentHint}</p>
+          </div>
+        </div>
+      )}
+
+      {/* MCQ options */}
+      {question.type === "multiple-choice" && question.choices && (
+        <div className="mt-5 space-y-2.5">
+          {question.choices.map((o) => (
+            <MCOption
+              key={o.id}
+              opt={o}
+              qState={qState}
+              selected={selected}
+              onSelect={setSelected}
+              correctAnswer={result?.correctAnswer ?? question.correctAnswer}
+            />
           ))}
         </div>
       )}
 
-      {/* 단답형/서술형 입력 */}
-      {question.type !== "multiple-choice" && !result && (
-        <textarea
-          value={textAnswer}
-          onChange={(e) => setTextAnswer(e.target.value)}
-          placeholder="답을 입력해주세요..."
-          className="w-full px-4 py-3 rounded-lg border border-gray-200 focus:border-blue-400 focus:outline-none text-gray-700 resize-none mb-4"
-          rows={3}
-        />
-      )}
-
-      {/* 힌트 영역 */}
-      {!result && hintsShown > 0 && (
-        <div className="mb-4 space-y-2">
-          {question.hints.slice(0, hintsShown).map((hint, i) => (
-            <div key={i} className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2">
-              <span className="text-amber-700 text-sm">
-                💡 힌트 {i + 1}: {hint}
-              </span>
-            </div>
-          ))}
+      {/* text answer */}
+      {question.type !== "multiple-choice" && qState === "idle" && (
+        <div className="mt-5 rounded-xl border border-ink-200 bg-ink-50 p-3 focus-within:bg-white focus-within:border-brand-400 transition">
+          <textarea
+            rows={4}
+            value={textAns}
+            onChange={(e) => setTextAns(e.target.value)}
+            placeholder="답을 입력해주세요..."
+            className="w-full bg-transparent outline-none text-[14px] text-ink-900 placeholder:text-ink-400 resize-none leading-relaxed"
+          />
         </div>
       )}
 
-      {/* 결과 영역 */}
-      {result && (
-        <div className={`rounded-lg p-4 mb-4 ${result.isCorrect ? "bg-green-50 border border-green-200" : "bg-red-50 border border-red-200"}`}>
-          <p className={`font-medium mb-2 ${result.isCorrect ? "text-green-700" : "text-red-700"}`}>
-            {result.isCorrect ? "✅ 정답이에요!" : "❌ 아쉬워요!"}
-          </p>
-          {!result.isCorrect && (
-            <p className="text-sm text-gray-600 mb-2">
-              정답: <span className="font-medium">{result.correctAnswer}</span>
-            </p>
-          )}
-          <p className="text-sm text-gray-600">💬 {result.explanation}</p>
-        </div>
-      )}
+      {/* footer */}
+      <div className="mt-6 flex items-center justify-between gap-3">
+        <button
+          onClick={showHint}
+          disabled={hintsUsed >= 3 || qState === "answered"}
+          className="inline-flex items-center gap-1.5 h-10 px-3.5 rounded-lg border border-ink-200 hover:border-amber-300 hover:bg-amber-50 text-[13px] font-medium text-ink-700 transition whitespace-nowrap shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          <span>💡</span>
+          <span>힌트</span>
+          <span className="text-amber-700 font-bold">{hintsUsed}/3</span>
+        </button>
 
-      {/* 버튼 영역 */}
-      {!result && (
-        <div className="flex gap-2">
-          {hintsShown < 3 && (
-            <button
-              onClick={showNextHint}
-              className="px-4 py-2 text-sm text-amber-600 border border-amber-300 rounded-lg hover:bg-amber-50 transition-colors"
-            >
-              힌트 보기 ({hintsShown}/3)
-            </button>
-          )}
+        {qState === "idle" ? (
           <button
             onClick={handleSubmit}
-            disabled={loading || (!selectedAnswer && !textAnswer)}
-            className="flex-1 bg-blue-600 text-white py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-40"
+            disabled={!canSubmit}
+            className={`h-10 px-5 rounded-lg text-[13.5px] font-semibold inline-flex items-center gap-2 transition whitespace-nowrap shrink-0 ${
+              canSubmit
+                ? "bg-brand-600 hover:bg-brand-700 text-white shadow-soft"
+                : "bg-ink-100 text-ink-400 cursor-not-allowed"
+            }`}
           >
-            {loading ? "확인 중..." : "제출하기"}
+            {submitting ? "확인 중..." : <><span>제출하기</span> <IArrow className="w-4 h-4" /></>}
           </button>
+        ) : (
+          <button
+            onClick={handleRetry}
+            className="h-10 px-4 rounded-lg border border-ink-200 hover:bg-ink-50 text-[13px] font-medium text-ink-700 whitespace-nowrap shrink-0"
+          >
+            다시 풀기
+          </button>
+        )}
+      </div>
+
+      {/* feedback */}
+      {qState === "answered" && result && (
+        <div className={`mt-5 rounded-xl border p-4 ${
+          result.isCorrect ? "border-emerald-200 bg-emerald-50" : "border-rose-200 bg-rose-50"
+        }`}>
+          <div className={`flex items-center gap-2 font-bold text-[14px] ${result.isCorrect ? "text-emerald-700" : "text-rose-700"}`}>
+            {result.isCorrect ? <><ICheck className="w-4 h-4" /> 정답이에요! 🎉</> : <><IX className="w-4 h-4" /> 아쉬워요!</>}
+          </div>
+          <p className={`mt-1.5 text-[13.5px] leading-relaxed ${result.isCorrect ? "text-emerald-900/85" : "text-rose-900/85"}`}>
+            {result.explanation}
+          </p>
         </div>
       )}
-    </div>
+    </article>
   );
 }
 
-function WorksheetContent() {
-  const searchParams = useSearchParams();
-  const userId = searchParams.get("userId");
-  const [worksheet, setWorksheet] = useState<Worksheet | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [allDone, setAllDone] = useState(false);
+// ─── Collapsed Question Preview ────────────────────────────────────────────────
 
-  useEffect(() => {
-    fetch("/api/worksheet")
-      .then((r) => r.json())
-      .then((data) => {
-        setWorksheet(data);
-        setLoading(false);
-      });
-  }, []);
+function CollapsedQuestion({ question, index, total }: { question: Question; index: number; total: number }) {
+  return (
+    <article className="rounded-2xl border border-ink-200 bg-white px-6 py-4 shadow-soft flex items-center justify-between">
+      <div className="flex items-center gap-3 min-w-0">
+        <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-ink-100 text-ink-700 text-[13px] font-bold shrink-0">
+          {index + 1}
+        </span>
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[14px] font-semibold text-ink-900 truncate">{question.text}</span>
+            <Badge tone="ink">{typeLabel(question.type)}</Badge>
+          </div>
+          <div className="text-[12px] text-ink-500 mt-0.5">문제 {index + 1} / {total}</div>
+        </div>
+      </div>
+    </article>
+  );
+}
 
-  async function handleComplete() {
-    const res = await fetch("/api/complete", { method: "POST" });
-    const data = await res.json();
-    if (data.isCompleted) {
-      setAllDone(true);
-    } else {
-      setAllDone(true);
+// ─── Task Accordion ───────────────────────────────────────────────────────────
+
+function TaskAccordion({ task }: { task: HandsOnTask }) {
+  const [open, setOpen]   = useState(true);
+  const [done, setDone]   = useState(false);
+  const [answer, setAnswer] = useState("");
+
+  return (
+    <article className="rounded-2xl border border-ink-200 bg-white shadow-soft overflow-hidden">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center justify-between gap-3 px-6 py-4 text-left hover:bg-ink-50/60"
+      >
+        <div className="flex items-center gap-3">
+          <span className="w-8 h-8 rounded-lg bg-indigo-50 text-brand-700 flex items-center justify-center shrink-0">
+            <IClip className="w-4 h-4" />
+          </span>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[15px] font-bold text-ink-900 whitespace-nowrap">실습 과제</span>
+              <Badge tone="amber">선택</Badge>
+            </div>
+            <div className="text-[12px] text-ink-500">직접 해볼 때 가장 잘 기억돼요</div>
+          </div>
+        </div>
+        <IChevron className={`w-5 h-5 text-ink-400 transition ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      {open && (
+        <div className="px-6 pb-6">
+          <p className="text-[14px] text-ink-700 leading-relaxed">{task.instruction}</p>
+
+          {task.expectedOutcome && (
+            <div className="mt-3 rounded-lg border border-ink-200 bg-ink-50 px-4 py-3 text-[13px] text-ink-600">
+              <span className="font-semibold text-ink-900">기대 결과물:</span> {task.expectedOutcome}
+            </div>
+          )}
+
+          {task.toolSuggestion && (
+            <p className="mt-2 text-[12.5px] text-brand-700">🔧 추천 도구: {task.toolSuggestion}</p>
+          )}
+
+          <label className="mt-4 flex items-center gap-2.5 cursor-pointer select-none">
+            <input type="checkbox" checked={done} onChange={(e) => setDone(e.target.checked)} className="sr-only peer" />
+            <span className="w-5 h-5 rounded-md border-2 border-ink-300 peer-checked:bg-brand-600 peer-checked:border-brand-600 flex items-center justify-center text-white transition">
+              {done && <ICheck className="w-3 h-3" />}
+            </span>
+            <span className={`text-[13.5px] ${done ? "text-ink-900 font-medium" : "text-ink-700"}`}>과제를 완료했어요</span>
+          </label>
+
+          <div className="mt-4 rounded-xl border border-ink-200 bg-ink-50 p-3 focus-within:bg-white focus-within:border-brand-400 transition">
+            <textarea
+              rows={5}
+              value={answer}
+              onChange={(e) => setAnswer(e.target.value)}
+              placeholder="여기에 결과물을 적어주세요..."
+              className="w-full bg-transparent outline-none text-[13.5px] font-mono text-ink-900 leading-relaxed placeholder:text-ink-400 resize-none"
+            />
+          </div>
+
+          <div className="mt-3 flex items-center justify-between gap-3">
+            <span className="text-[12px] text-ink-400">AI가 피드백을 드릴 거예요 · 약 3–5초 소요</span>
+            <button className="h-9 px-4 rounded-lg bg-ink-900 hover:bg-ink-700 text-white text-[13px] font-semibold inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 transition">
+              <ISpark className="w-3.5 h-3.5" /> AI 피드백 받기
+            </button>
+          </div>
+        </div>
+      )}
+    </article>
+  );
+}
+
+// ─── Complete Right Panel ─────────────────────────────────────────────────────
+
+function CompleteRight({
+  worksheet,
+  onComplete,
+  onAnswered,
+}: {
+  worksheet: WorksheetData;
+  onComplete: () => void;
+  onAnswered: () => void;
+}) {
+  const [activeIdx, setActiveIdx] = useState(0);
+  const questions = worksheet.questions;
+
+  function handleQuestionAnswered(i: number) {
+    onAnswered();
+    if (i === activeIdx && activeIdx < questions.length - 1) {
+      setActiveIdx(i + 1);
     }
   }
 
-  if (loading) {
-    return (
-      <main className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="text-4xl mb-4">📝</div>
-          <p className="text-gray-600">오늘의 학습지를 준비하는 중이에요...</p>
-          <p className="text-sm text-gray-400 mt-2">Claude가 문제를 만들고 있어요!</p>
-        </div>
-      </main>
-    );
-  }
-
-  if (allDone) {
-    return (
-      <main className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center px-4">
-          <div className="text-5xl mb-4">🎉</div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">오늘 학습 완료!</h1>
-          <p className="text-gray-500 mb-6">수고하셨어요. 꾸준히 하면 반드시 성장해요!</p>
-          <a
-            href="/"
-            className="inline-block bg-blue-600 text-white px-8 py-3 rounded-xl font-medium hover:bg-blue-700 transition-colors"
-          >
-            홈으로 돌아가기
-          </a>
-        </div>
-      </main>
-    );
-  }
-
   return (
-    <main className="min-h-screen bg-gray-50 py-12 px-4">
-      <div className="max-w-2xl mx-auto">
-        {/* 헤더 */}
-        <div className="mb-8">
-          <span className="text-sm text-blue-600 font-medium">오늘의 학습</span>
-          <h1 className="text-2xl font-bold text-gray-900 mt-1">
-            {worksheet?.topicTitle}
-          </h1>
-        </div>
-
-        {/* 개념 파트 */}
-        <div className="bg-white rounded-2xl p-6 shadow-sm mb-6">
-          <h2 className="font-semibold text-gray-900 mb-3">📖 핵심 개념</h2>
-          <p className="text-gray-700 leading-relaxed mb-4">
-            {worksheet?.conceptSummary}
-          </p>
-          <div className="bg-blue-50 rounded-xl p-4">
-            <p className="text-sm text-blue-700">
-              <span className="font-medium">💼 실무 예시</span><br />
-              {worksheet?.realWorldExample}
-            </p>
-          </div>
-        </div>
-
-        {/* 문제 파트 */}
-        <h2 className="font-semibold text-gray-900 mb-3">✏️ 확인 문제</h2>
-        {worksheet?.questions.map((q, i) => (
-          <QuestionCard key={q.questionId} question={q} index={i} worksheetId={(worksheet as Worksheet & { id: string }).id} />
+    <main className="flex-1 bg-ink-50/60 overflow-y-auto">
+      <div className="px-10 py-8 space-y-6">
+        {questions.map((q, i) => (
+          i <= activeIdx ? (
+            <QuestionCard
+              key={q.questionId}
+              question={q}
+              index={i}
+              total={questions.length}
+              worksheetId={worksheet.id}
+              onAnswered={() => handleQuestionAnswered(i)}
+            />
+          ) : (
+            <CollapsedQuestion
+              key={q.questionId}
+              question={q}
+              index={i}
+              total={questions.length}
+            />
+          )
         ))}
 
-        {/* 실습 파트 */}
-        {worksheet?.handsOnTask && (
-          <div className="bg-purple-50 rounded-2xl p-6 shadow-sm mb-6">
-            <h2 className="font-semibold text-purple-900 mb-3">🛠️ 실습 과제</h2>
-            <p className="text-purple-800 mb-3">{worksheet.handsOnTask.instruction}</p>
-            <div className="bg-white rounded-xl p-4 mb-3">
-              <p className="text-sm text-gray-600">
-                <span className="font-medium">기대 결과물:</span> {worksheet.handsOnTask.expectedOutcome}
-              </p>
-            </div>
-            {worksheet.handsOnTask.toolSuggestion && (
-              <p className="text-sm text-purple-600">
-                🔧 추천 도구: {worksheet.handsOnTask.toolSuggestion}
-              </p>
-            )}
-          </div>
+        {worksheet.handsOnTask && (
+          <TaskAccordion task={worksheet.handsOnTask} />
         )}
 
-        {/* 완료 버튼 */}
-        <button
-          onClick={handleComplete}
-          className="w-full bg-green-600 text-white py-4 rounded-xl text-lg font-medium hover:bg-green-700 transition-colors"
-        >
-          오늘 학습 완료! 🎉
-        </button>
+        {/* completion CTA */}
+        <div className="pt-2 pb-1 flex items-center justify-between gap-3">
+          <div className="text-[13px] text-ink-500 min-w-0">
+            <span className="text-ink-900 font-semibold">잘하고 있어요!</span> 오늘 학습을 완료하면 다음 토픽으로 넘어가요.
+          </div>
+          <button
+            onClick={onComplete}
+            className="h-12 px-6 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-[14.5px] font-semibold inline-flex items-center gap-2 shadow-soft transition active:scale-[0.99] whitespace-nowrap shrink-0"
+          >
+            <ICheck className="w-4 h-4" />
+            오늘 학습 완료!
+            <IArrow className="w-4 h-4" />
+          </button>
+        </div>
       </div>
     </main>
   );
 }
 
-export default function WorksheetPage() {
+// ─── Done Screen ──────────────────────────────────────────────────────────────
+
+function DoneScreen({ onHome }: { onHome: () => void }) {
   return (
-    <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><p>로딩 중...</p></div>}>
-      <WorksheetContent />
-    </Suspense>
+    <div className="min-h-screen flex items-center justify-center bg-ink-50">
+      <div className="text-center px-6">
+        <div className="w-20 h-20 rounded-full bg-gradient-to-br from-brand-500 to-brand-700 flex items-center justify-center mx-auto mb-6 shadow-soft">
+          <ICheck className="w-10 h-10 text-white" />
+        </div>
+        <h1 className="text-[28px] font-bold text-ink-900 tracking-tight">오늘 학습 완료!</h1>
+        <p className="mt-2 text-ink-500 text-[15px]">수고하셨어요. 꾸준히 하면 반드시 성장해요!</p>
+        <button
+          onClick={onHome}
+          className="mt-8 h-12 px-8 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-[15px] font-semibold inline-flex items-center gap-2 shadow-soft transition"
+        >
+          홈으로 돌아가기 <IArrow className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
+export default function WorksheetPage() {
+  const router = useRouter();
+  const [worksheet, setWorksheet] = useState<WorksheetData | null>(null);
+  const [loading, setLoading]     = useState(true);
+  const [error, setError]         = useState<string | null>(null);
+  const [done, setDone]           = useState(false);
+  const [answeredCount, setAnsweredCount] = useState(0);
+
+  useEffect(() => {
+    fetch("/api/worksheet")
+      .then((r) => {
+        if (!r.ok) throw new Error("학습지를 불러올 수 없어요.");
+        return r.json();
+      })
+      .then((data: WorksheetData) => {
+        setWorksheet(data);
+        setLoading(false);
+      })
+      .catch((e: Error) => {
+        setError(e.message);
+        setLoading(false);
+      });
+  }, []);
+
+  async function handleComplete() {
+    await fetch("/api/complete", { method: "POST" });
+    setDone(true);
+  }
+
+  if (done) return <DoneScreen onHome={() => router.push("/dashboard")} />;
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-ink-50">
+        <div className="text-center space-y-4">
+          <p className="text-ink-700">{error}</p>
+          <button
+            onClick={() => router.push("/curriculum")}
+            className="px-5 py-2.5 bg-brand-600 text-white rounded-xl text-sm font-medium hover:bg-brand-700 transition"
+          >
+            커리큘럼으로 돌아가기
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="ls-frame w-screen h-screen flex flex-col bg-white overflow-hidden">
+      <Header worksheet={worksheet} loading={loading} answeredCount={answeredCount} />
+      <div className="flex-1 min-h-0 flex overflow-hidden">
+        <LeftPanel worksheet={worksheet} />
+        {loading
+          ? <LoadingRight />
+          : <CompleteRight
+              worksheet={worksheet!}
+              onComplete={handleComplete}
+              onAnswered={() => setAnsweredCount((c) => c + 1)}
+            />
+        }
+      </div>
+    </div>
   );
 }

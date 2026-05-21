@@ -1,5 +1,6 @@
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import LogoutButton from "@/components/LogoutButton";
 import ContinueButton from "@/components/ContinueButton";
 
@@ -70,6 +71,12 @@ export default async function Home() {
 
             {/* 이어서 학습 / 새로 시작 */}
             <ContinueButton />
+            <Link
+              href="/dashboard"
+              className="mt-3 block w-full text-center text-gray-400 text-sm hover:text-gray-600 py-2 transition-colors"
+            >
+              학습 현황 보기 →
+            </Link>
             <a
               href="/onboarding"
               className="mt-3 block w-full text-center text-gray-400 text-sm hover:text-gray-600 py-2 transition-colors"
