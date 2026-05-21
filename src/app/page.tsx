@@ -21,6 +21,19 @@ interface WorksheetRow {
   created_at: string;
 }
 
+interface CurriculumData {
+  id: string;
+  emoji: string;
+  title: string;
+  subtitle: string;
+  accent: string;
+  total: number;
+  done: number;
+  nextTopic: string | null;
+  lastStudied: string;
+  status: "active" | "done";
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function computeStreak(rows: WorksheetRow[]): number {
@@ -47,9 +60,10 @@ function countThisWeek(rows: WorksheetRow[]): number {
 }
 
 function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString("ko-KR", {
-    year: "numeric", month: "numeric", day: "numeric",
-  }).replace(/\. /g, ".").replace(/\.$/, "");
+  return new Date(iso)
+    .toLocaleDateString("ko-KR", { year: "numeric", month: "numeric", day: "numeric" })
+    .replace(/\. /g, ".")
+    .replace(/\.$/, "");
 }
 
 function todayLabel() {
@@ -58,11 +72,35 @@ function todayLabel() {
   });
 }
 
-function fmtWeekTime(sessions: number) {
-  const mins = sessions * 20;
-  if (mins < 60) return `${mins}m`;
-  return `${Math.floor(mins / 60)}h ${mins % 60 > 0 ? `${mins % 60}m` : ""}`.trim();
+function fmtMins(totalMins: number): string {
+  if (totalMins < 60) return `${totalMins}m`;
+  const h = Math.floor(totalMins / 60);
+  const m = totalMins % 60;
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
 }
+
+function relativeDate(iso: string): string {
+  const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+  if (diff === 0) return "오늘";
+  if (diff === 1) return "어제";
+  return `${diff}일 전`;
+}
+
+// ─── Accent config ────────────────────────────────────────────────────────────
+
+const ACCENTS: Record<string, { tile: string; bar: string; ring: string; dot: string }> = {
+  brand:   { tile: "bg-brand-50 text-brand-700",     bar: "from-brand-500 to-brand-700",    ring: "ring-brand-100",   dot: "bg-brand-500" },
+  violet:  { tile: "bg-violet-50 text-violet-700",   bar: "from-violet-500 to-fuchsia-600", ring: "ring-violet-100",  dot: "bg-violet-500" },
+  emerald: { tile: "bg-emerald-50 text-emerald-700", bar: "from-emerald-500 to-teal-600",   ring: "ring-emerald-100", dot: "bg-emerald-500" },
+  amber:   { tile: "bg-amber-50 text-amber-700",     bar: "from-amber-400 to-orange-500",   ring: "ring-amber-100",   dot: "bg-amber-500" },
+};
+
+const SUBJECT_CONFIG: Record<string, { emoji: string; label: string; accent: string }> = {
+  "ai-data":   { emoji: "🤖", label: "AI·데이터 기초", accent: "violet" },
+  "economics": { emoji: "💰", label: "경제·금융 기초", accent: "emerald" },
+  "marketing": { emoji: "📈", label: "마케팅 기초",    accent: "amber" },
+  "backend":   { emoji: "💻", label: "백엔드 입문",    accent: "brand" },
+};
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
 
@@ -105,11 +143,11 @@ function IFlame(p: React.SVGProps<SVGSVGElement>) {
 function ITarget(p: React.SVGProps<SVGSVGElement>) {
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...p}><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/></svg>;
 }
-function IBook(p: React.SVGProps<SVGSVGElement>) {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M4 5a2 2 0 0 1 2-2h13v15H6a2 2 0 0 0-2 2V5z"/><path d="M19 18H6a2 2 0 0 0-2 2"/></svg>;
-}
 function IDots(p: React.SVGProps<SVGSVGElement>) {
   return <svg viewBox="0 0 24 24" fill="currentColor" {...p}><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>;
+}
+function IPlus(p: React.SVGProps<SVGSVGElement>) {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M12 5v14M5 12h14"/></svg>;
 }
 
 // ─── Atoms ────────────────────────────────────────────────────────────────────
@@ -154,7 +192,6 @@ function Header({ userName, userField }: { userName: string; userField: string }
   return (
     <header className="shrink-0 border-b border-ink-200 bg-white/90 backdrop-blur z-10">
       <div className="flex items-center gap-3 px-8 h-16">
-        {/* Logo */}
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-500 to-brand-700 flex items-center justify-center text-white shadow-soft">
             <ISpark className="w-4 h-4" />
@@ -165,11 +202,11 @@ function Header({ userName, userField }: { userName: string; userField: string }
           </div>
         </div>
 
-        {/* Top nav */}
         <nav className="ml-6 hidden lg:flex items-center gap-1 text-[13px]">
-          <Link href="/" className="px-3 h-9 inline-flex items-center rounded-lg text-ink-900 font-semibold bg-ink-100 whitespace-nowrap">대시보드</Link>
+          <Link href="/"           className="px-3 h-9 inline-flex items-center rounded-lg text-ink-900 font-semibold bg-ink-100 whitespace-nowrap">대시보드</Link>
           <Link href="/curriculum" className="px-3 h-9 inline-flex items-center rounded-lg text-ink-600 hover:bg-ink-50 whitespace-nowrap">커리큘럼</Link>
-          <Link href="/worksheet"  className="px-3 h-9 inline-flex items-center rounded-lg text-ink-600 hover:bg-ink-50 whitespace-nowrap">오늘 학습</Link>
+          <Link href="#"           className="px-3 h-9 inline-flex items-center rounded-lg text-ink-600 hover:bg-ink-50 whitespace-nowrap">학습 기록</Link>
+          <Link href="#"           className="px-3 h-9 inline-flex items-center rounded-lg text-ink-600 hover:bg-ink-50 whitespace-nowrap">설정</Link>
         </nav>
 
         <div className="flex-1" />
@@ -203,15 +240,13 @@ function Sidebar({ userName, userField, level, streak }: {
 }) {
   const initial = userName.slice(-2, -1) || userName[0] || "U";
   const items = [
-    { href: "/",          label: "홈",          Icon: IHome,    badge: null, active: true  },
-    { href: "/worksheet", label: "오늘 학습",    Icon: IToday,   badge: "1", active: false },
-    { href: "/curriculum",label: "전체 커리큘럼", Icon: IList,    badge: null, active: false },
-    { href: "#",          label: "학습 기록",     Icon: IHistory, badge: null, active: false },
+    { href: "/",           label: "홈",           Icon: IHome,    badge: null,  active: true  },
+    { href: "/worksheet",  label: "오늘 학습",     Icon: IToday,   badge: "1",   active: false },
+    { href: "/curriculum", label: "전체 커리큘럼", Icon: IList,    badge: null,  active: false },
+    { href: "#",           label: "학습 기록",     Icon: IHistory, badge: null,  active: false },
   ];
-
   return (
     <aside className="w-[240px] shrink-0 border-r border-ink-200 bg-white flex flex-col">
-      {/* Profile card */}
       <div className="p-4">
         <div className="rounded-2xl border border-ink-200 bg-ink-50/70 p-4">
           <div className="flex items-center gap-3">
@@ -232,7 +267,6 @@ function Sidebar({ userName, userField, level, streak }: {
         </div>
       </div>
 
-      {/* Nav */}
       <nav className="px-3 pb-3 space-y-0.5">
         <div className="px-3 pt-2 pb-1.5 text-[10.5px] font-bold uppercase tracking-wider text-ink-400">메뉴</div>
         {items.map(({ href, label, Icon, badge, active }) => (
@@ -254,7 +288,6 @@ function Sidebar({ userName, userField, level, streak }: {
         ))}
       </nav>
 
-      {/* Footer hint */}
       <div className="mt-auto p-4">
         <div className="rounded-xl border border-ink-200 bg-white p-3.5">
           <div className="flex items-center gap-2">
@@ -273,22 +306,16 @@ function Sidebar({ userName, userField, level, streak }: {
 // ─── Welcome Card ─────────────────────────────────────────────────────────────
 
 function Welcome({ userName, dateLabel, prevTopic, todayTopic, streak, weekSessions }: {
-  userName: string;
-  dateLabel: string;
-  prevTopic: string | null;
-  todayTopic: string | null;
-  streak: number;
-  weekSessions: number;
+  userName: string; dateLabel: string; prevTopic: string | null;
+  todayTopic: string | null; streak: number; weekSessions: number;
 }) {
   const weeklyGoal = 7;
   const weeklyPct = Math.min(Math.round((weekSessions / weeklyGoal) * 100), 100);
-
   return (
     <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-brand-600 via-brand-700 to-indigo-900 text-white shadow-card">
       <div className="absolute inset-0 dot-grid opacity-60 pointer-events-none" />
       <div className="absolute -top-16 -right-10 w-64 h-64 rounded-full bg-white/10 blur-2xl" />
       <div className="absolute -bottom-20 right-40 w-72 h-72 rounded-full bg-indigo-400/20 blur-3xl" />
-
       <div className="relative px-8 py-7 flex items-center gap-8">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 text-[12px] font-medium text-brand-100">
@@ -305,10 +332,7 @@ function Welcome({ userName, dateLabel, prevTopic, todayTopic, streak, weekSessi
               : "오늘부터 AI 1:1 과외를 시작해볼까요? 첫 학습이 기다리고 있어요!"}
           </p>
           <div className="mt-5 flex items-center gap-2">
-            <Link
-              href="/worksheet"
-              className="h-10 px-4 rounded-xl bg-white text-brand-700 hover:bg-brand-50 text-[13.5px] font-bold inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 shadow-soft"
-            >
+            <Link href="/worksheet" className="h-10 px-4 rounded-xl bg-white text-brand-700 hover:bg-brand-50 text-[13.5px] font-bold inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 shadow-soft">
               <IPlay className="w-3.5 h-3.5" />
               <span className="whitespace-nowrap">오늘 학습 시작</span>
             </Link>
@@ -320,7 +344,6 @@ function Welcome({ userName, dateLabel, prevTopic, todayTopic, streak, weekSessi
           </div>
         </div>
 
-        {/* Stats mini-cards */}
         <div className="hidden md:grid grid-cols-2 gap-2.5 w-[260px] shrink-0">
           <div className="rounded-2xl bg-white/10 border border-white/15 backdrop-blur-sm p-3.5">
             <div className="flex items-center gap-1.5 text-[11px] font-semibold text-brand-100">
@@ -337,7 +360,7 @@ function Welcome({ userName, dateLabel, prevTopic, todayTopic, streak, weekSessi
               <span className="whitespace-nowrap">이번 주</span>
             </div>
             <div className="mt-1 text-[24px] font-bold tabular-nums leading-none">
-              {weekSessions > 0 ? fmtWeekTime(weekSessions) : "—"}
+              {weekSessions > 0 ? fmtMins(weekSessions * 20) : "—"}
             </div>
           </div>
           <div className="col-span-2 rounded-2xl bg-white/10 border border-white/15 backdrop-blur-sm p-3.5">
@@ -361,177 +384,155 @@ function Welcome({ userName, dateLabel, prevTopic, todayTopic, streak, weekSessi
   );
 }
 
-// ─── Progress Card ────────────────────────────────────────────────────────────
+// ─── Curriculum Card ──────────────────────────────────────────────────────────
 
-function ProgressCard({ done, total, pct, courseTitle }: {
-  done: number; total: number; pct: number; courseTitle: string;
-}) {
-  const radius = 64;
-  const circ = 2 * Math.PI * radius;
-  const dash = circ * pct / 100;
-  const remaining = total - done;
+function CurriculumCard({ c }: { c: CurriculumData }) {
+  const pct = c.total > 0 ? Math.round((c.done / c.total) * 100) : 0;
+  const a = ACCENTS[c.accent] ?? ACCENTS.brand;
+  const completed = c.status === "done";
 
   return (
-    <article className="rounded-2xl border border-ink-200 bg-white p-6 shadow-soft flex flex-col h-full">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <span className="w-6 h-6 rounded-md bg-brand-50 text-brand-700 flex items-center justify-center shrink-0">
-            <IBook className="w-3.5 h-3.5" />
-          </span>
-          <h2 className="text-[15px] font-bold text-ink-900 whitespace-nowrap">학습 진도</h2>
+    <article className="group relative rounded-2xl border border-ink-200 bg-white p-5 shadow-soft hover:shadow-card hover:-translate-y-0.5 hover:border-brand-200 transition-all flex flex-col">
+      <div className="flex items-start gap-3">
+        <div className={`w-12 h-12 rounded-xl ${a.tile} flex items-center justify-center text-2xl shrink-0 ring-4 ${a.ring}`}>
+          <span>{c.emoji}</span>
         </div>
-        <Badge tone="brand">{courseTitle}</Badge>
-      </div>
-
-      <div className="mt-5 flex items-center gap-6">
-        {/* Donut chart */}
-        <div className="relative w-[150px] h-[150px] shrink-0">
-          <svg viewBox="0 0 160 160" className="w-full h-full -rotate-90">
-            <circle cx="80" cy="80" r={radius} fill="none" stroke="#E2E8F0" strokeWidth="12" />
-            <circle
-              cx="80" cy="80" r={radius}
-              fill="none" stroke="url(#pg)" strokeWidth="12"
-              strokeLinecap="round"
-              strokeDasharray={`${dash} ${circ}`}
-            />
-            <defs>
-              <linearGradient id="pg" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0%" stopColor="#6366F1" />
-                <stop offset="100%" stopColor="#4338CA" />
-              </linearGradient>
-            </defs>
-          </svg>
-          <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <div className="text-[28px] font-bold tabular-nums text-ink-900 leading-none">
-              {pct}<span className="text-[14px] font-semibold text-ink-500">%</span>
-            </div>
-            <div className="mt-1 text-[11px] text-ink-500 font-medium whitespace-nowrap">전체 진도율</div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {completed
+              ? <Badge tone="emerald" dot><span className="whitespace-nowrap">완료</span></Badge>
+              : <Badge tone="brand" dot><span className="whitespace-nowrap">진행 중</span></Badge>}
+            <span className="text-[11px] text-ink-400 whitespace-nowrap">마지막 학습 · {c.lastStudied}</span>
           </div>
+          <h3 className="mt-1.5 text-[16px] font-bold text-ink-900 leading-tight tracking-tight">
+            <Link href="/curriculum" className="hover:text-brand-700">{c.title}</Link>
+          </h3>
+          <div className="mt-0.5 text-[12px] text-ink-500 truncate">{c.subtitle}</div>
         </div>
-
-        {/* Stat grid */}
-        <div className="flex-1 min-w-0 grid grid-cols-3 gap-2.5">
-          {[
-            { label: "완료", value: done,      tone: "emerald" },
-            { label: "남은", value: remaining, tone: "brand"   },
-            { label: "전체", value: total,     tone: "ink"     },
-          ].map(({ label, value, tone }) => (
-            <div key={label} className="rounded-xl border border-ink-200 bg-ink-50/60 px-3 py-3 text-center">
-              <div className={`text-[10px] font-bold uppercase tracking-wider ${
-                tone === "emerald" ? "text-emerald-600" :
-                tone === "brand"   ? "text-brand-600"   : "text-ink-400"
-              }`}>{label}</div>
-              <div className="mt-1 text-[22px] font-bold tabular-nums text-ink-900 leading-none">{value}</div>
-              <div className="text-[10px] text-ink-400 mt-0.5">토픽</div>
-            </div>
-          ))}
-        </div>
+        <button className="opacity-0 group-hover:opacity-100 transition w-7 h-7 rounded-md text-ink-400 hover:bg-ink-100 hover:text-ink-700 flex items-center justify-center shrink-0">
+          <IDots className="w-4 h-4" />
+        </button>
       </div>
 
-      {/* Milestone bar */}
       <div className="mt-5">
-        <div className="flex items-center justify-between text-[11px] text-ink-500">
-          <span className="whitespace-nowrap">Unit 00</span>
-          <span className="whitespace-nowrap">Unit {Math.floor(total / 2).toString().padStart(2, "0")}</span>
-          <span className="whitespace-nowrap">Unit {String(total).padStart(2, "0")}</span>
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-ink-400">진도</span>
+          <span className="text-[12px] tabular-nums text-ink-700">
+            <span className={`font-bold text-[15px] ${completed ? "text-emerald-700" : "text-ink-900"}`}>{pct}%</span>
+            <span className="text-ink-400 ml-1.5">{c.done} / {c.total} 토픽</span>
+          </span>
         </div>
-        <div className="mt-1.5 relative h-2 rounded-full bg-ink-100 overflow-hidden">
-          <div className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-brand-500 to-brand-700" style={{ width: `${pct}%` }} />
-          {Array.from({ length: total - 1 }, (_, i) => (
-            <span
-              key={i}
-              className="absolute top-1/2 -translate-y-1/2 w-0.5 h-1.5 bg-white/70"
-              style={{ left: `${((i + 1) / total) * 100}%` }}
-            />
-          ))}
+        <div className="mt-1.5 h-2 rounded-full bg-ink-100 overflow-hidden">
+          <div className={`h-full rounded-full bg-gradient-to-r ${a.bar}`} style={{ width: `${pct}%` }} />
         </div>
       </div>
 
-      <Link
-        href="/worksheet"
-        className="mt-5 h-11 rounded-xl bg-ink-900 hover:bg-ink-800 text-white text-[13.5px] font-semibold inline-flex items-center justify-center gap-1.5 transition active:scale-[0.99] whitespace-nowrap"
-      >
-        <span className="whitespace-nowrap">이어서 학습하기</span>
-        <IArrow className="w-4 h-4" />
-      </Link>
+      <div className="mt-4 min-h-[48px]">
+        {!completed ? (
+          <div className="flex items-start gap-2">
+            <span className={`mt-1 w-1.5 h-1.5 rounded-full ${a.dot} shrink-0`} />
+            <div className="min-w-0">
+              <div className="text-[10.5px] font-bold uppercase tracking-wider text-ink-400">다음 토픽</div>
+              <div className="text-[12.5px] text-ink-700 leading-snug mt-0.5 line-clamp-2">{c.nextTopic}</div>
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-lg bg-emerald-50 border border-emerald-100 px-3 py-2 text-[12px] text-emerald-800 inline-flex items-center gap-1.5">
+            <ICheck className="w-3.5 h-3.5" /> <span className="whitespace-nowrap">모든 토픽을 마쳤어요</span>
+          </div>
+        )}
+      </div>
+
+      <div className="mt-5 pt-4 border-t border-ink-100 flex items-center gap-2">
+        {completed ? (
+          <>
+            <Link href="/curriculum" className="flex-1 h-10 rounded-lg bg-ink-100 hover:bg-ink-200 text-ink-700 text-[13px] font-semibold inline-flex items-center justify-center gap-1.5 whitespace-nowrap transition">
+              <span className="whitespace-nowrap">복습하기</span>
+            </Link>
+            <button className="h-10 px-3 rounded-lg border border-ink-200 hover:border-brand-300 hover:bg-brand-50 text-[12.5px] font-semibold text-ink-700 hover:text-brand-700 inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 transition">
+              <IHistory className="w-3.5 h-3.5" /> <span className="whitespace-nowrap">리포트</span>
+            </button>
+          </>
+        ) : (
+          <Link href="/worksheet" className="flex-1 h-10 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-[13px] font-semibold inline-flex items-center justify-center gap-1.5 whitespace-nowrap shadow-soft transition active:scale-[0.99]">
+            <IPlay className="w-3 h-3" /> <span className="whitespace-nowrap">이어서 학습</span> <IArrow className="w-3.5 h-3.5" />
+          </Link>
+        )}
+      </div>
     </article>
   );
 }
 
-// ─── Today Card ──────────────────────────────────────────────────────────────
+// ─── New Learning Card ────────────────────────────────────────────────────────
 
-function TodayCard({ topic }: { topic: TopicRow | undefined }) {
-  if (!topic) {
-    return (
-      <article className="rounded-2xl border border-ink-200 bg-white p-6 shadow-card flex flex-col h-full items-center justify-center text-center">
-        <div className="text-4xl mb-3">🎉</div>
-        <h3 className="text-[17px] font-bold text-ink-900">모든 커리큘럼 완료!</h3>
-        <p className="mt-1 text-[13px] text-ink-500">수고하셨어요. 다음 커리큘럼을 시작해볼까요?</p>
-      </article>
-    );
-  }
+function NewLearningCard() {
+  return (
+    <Link href="/onboarding" className="group rounded-2xl border-2 border-dashed border-ink-300 hover:border-brand-400 hover:bg-brand-50/40 bg-white/50 p-5 flex flex-col items-start justify-center min-h-[300px] transition-all">
+      <div className="w-12 h-12 rounded-xl bg-ink-100 group-hover:bg-brand-100 text-ink-400 group-hover:text-brand-600 flex items-center justify-center transition">
+        <IPlus className="w-6 h-6" />
+      </div>
+      <div className="mt-4 text-[15px] font-bold text-ink-900 group-hover:text-brand-700 transition whitespace-nowrap">새 학습 추가하기</div>
+      <p className="mt-1.5 text-[12.5px] text-ink-500 leading-relaxed">
+        관심 분야를 알려주시면 AI 튜터가<br />맞춤 커리큘럼을 만들어 드려요
+      </p>
+      <span className="mt-4 inline-flex items-center gap-1 text-[12px] font-semibold text-brand-700 group-hover:text-brand-800">
+        <span className="whitespace-nowrap">설문 시작</span> <IArrow className="w-3.5 h-3.5" />
+      </span>
+    </Link>
+  );
+}
+
+// ─── My Learning Section ──────────────────────────────────────────────────────
+
+function MyLearningSection({ curricula, totalLearningTime }: {
+  curricula: CurriculumData[];
+  totalLearningTime: string;
+}) {
+  const activeCount = curricula.filter((c) => c.status === "active").length;
+  const doneCount   = curricula.filter((c) => c.status === "done").length;
 
   return (
-    <article className="rounded-2xl border border-brand-200 bg-white p-6 shadow-card relative overflow-hidden flex flex-col h-full">
-      <div className="absolute top-0 right-0 w-32 h-32 bg-brand-50 rounded-bl-[100%] -z-0" />
-
-      <div className="relative flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <span className="w-6 h-6 rounded-md bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
-            <ISpark className="w-3.5 h-3.5" />
-          </span>
-          <h2 className="text-[15px] font-bold text-ink-900 whitespace-nowrap">오늘의 학습</h2>
+    <section>
+      <header className="flex items-end justify-between gap-3 mb-4">
+        <div>
+          <h2 className="text-[20px] font-bold text-ink-900 tracking-tight flex items-center gap-2">
+            <span className="whitespace-nowrap">내 학습</span>
+            <Badge tone="brand">{curricula.length}개</Badge>
+          </h2>
+          <p className="mt-1 text-[13px] text-ink-500">
+            <span className="whitespace-nowrap">진행 중 <b className="text-ink-900 tabular-nums">{activeCount}</b></span>
+            <span className="mx-2 text-ink-300">·</span>
+            <span className="whitespace-nowrap">완료 <b className="text-ink-900 tabular-nums">{doneCount}</b></span>
+            <span className="mx-2 text-ink-300">·</span>
+            <span className="whitespace-nowrap">총 학습 시간 <b className="text-ink-900 tabular-nums">{totalLearningTime}</b></span>
+          </p>
         </div>
-        <Badge tone="emerald" dot>준비됨</Badge>
-      </div>
-
-      <div className="relative mt-5">
-        <h3 className="mt-1 text-[20px] font-bold text-ink-900 leading-snug tracking-tight">
-          {topic.title}
-        </h3>
-        <p className="mt-1.5 text-[13px] text-ink-500 leading-relaxed line-clamp-2">{topic.description}</p>
-
-        <div className="mt-3 grid grid-cols-3 gap-2">
-          <div className="rounded-lg bg-ink-50 px-3 py-2.5">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-ink-400">예상 시간</div>
-            <div className="mt-0.5 text-[14px] font-bold text-ink-900 tabular-nums whitespace-nowrap">{topic.estimatedMinutes}분</div>
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="hidden md:flex items-center gap-0.5 p-0.5 rounded-lg border border-ink-200 bg-white text-[12px] font-medium">
+            <span className="px-2.5 h-7 rounded-md bg-ink-100 text-ink-900 whitespace-nowrap inline-flex items-center">전체</span>
+            <span className="px-2.5 h-7 rounded-md text-ink-500 whitespace-nowrap inline-flex items-center">진행 중</span>
+            <span className="px-2.5 h-7 rounded-md text-ink-500 whitespace-nowrap inline-flex items-center">완료</span>
           </div>
-          <div className="rounded-lg bg-ink-50 px-3 py-2.5">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-ink-400">문제</div>
-            <div className="mt-0.5 text-[14px] font-bold text-ink-900 tabular-nums whitespace-nowrap">2 문항</div>
-          </div>
-          <div className="rounded-lg bg-ink-50 px-3 py-2.5">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-ink-400">실습</div>
-            <div className="mt-0.5 text-[14px] font-bold text-ink-900 tabular-nums whitespace-nowrap">
-              {topic.hasHandsOn ? "1 과제" : "—"}
-            </div>
-          </div>
+          <Link href="/onboarding" className="h-9 px-3 rounded-lg border border-ink-200 hover:bg-ink-50 text-[12.5px] font-medium text-ink-700 inline-flex items-center gap-1.5 whitespace-nowrap transition">
+            <span aria-hidden>＋</span> <span className="whitespace-nowrap">새 학습 추가</span>
+          </Link>
         </div>
-      </div>
+      </header>
 
-      <div className="relative mt-auto pt-5">
-        <Link
-          href="/worksheet"
-          className="h-11 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-[13.5px] font-semibold flex items-center justify-center gap-1.5 transition active:scale-[0.99] shadow-soft whitespace-nowrap"
-        >
-          <IPlay className="w-3.5 h-3.5" />
-          <span className="whitespace-nowrap">시작하기</span>
-          <IArrow className="w-4 h-4" />
-        </Link>
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+        {curricula.map((c) => <CurriculumCard key={c.id} c={c} />)}
+        <NewLearningCard />
       </div>
-    </article>
+    </section>
   );
 }
 
 // ─── History Section ──────────────────────────────────────────────────────────
 
-function HistorySection({ worksheets, topics, currentIndex }: {
+function HistorySection({ worksheets, topicToCourse }: {
   worksheets: WorksheetRow[];
-  topics: TopicRow[];
-  currentIndex: number;
+  topicToCourse: Map<string, string>;
 }) {
-  const topicMap = new Map(topics.map((t, i) => [t.topicId, { ...t, index: i }]));
-
   return (
     <section className="rounded-2xl border border-ink-200 bg-white shadow-soft overflow-hidden">
       <header className="flex items-center justify-between gap-3 px-5 py-4 border-b border-ink-100">
@@ -540,7 +541,7 @@ function HistorySection({ worksheets, topics, currentIndex }: {
             <IHistory className="w-3.5 h-3.5" />
           </span>
           <h2 className="text-[15px] font-bold text-ink-900 whitespace-nowrap">최근 학습 기록</h2>
-          <Badge tone="ink">최근 10회</Badge>
+          <Badge tone="ink">최근 7일</Badge>
         </div>
         <Link href="#" className="text-[12.5px] font-semibold text-brand-700 hover:text-brand-800 inline-flex items-center gap-1 whitespace-nowrap shrink-0">
           <span className="whitespace-nowrap">전체 기록 보기</span>
@@ -558,32 +559,32 @@ function HistorySection({ worksheets, topics, currentIndex }: {
         </div>
       ) : (
         <>
-          {/* Column headers */}
-          <div className="grid grid-cols-[140px_1fr_130px_90px_40px] items-center gap-4 px-5 h-9 bg-ink-50 text-[10.5px] font-bold uppercase tracking-wider text-ink-500">
+          <div className="grid grid-cols-[120px_1fr_120px_120px_100px_40px] items-center gap-4 px-5 h-9 bg-ink-50 text-[10.5px] font-bold uppercase tracking-wider text-ink-500">
             <div>날짜</div>
             <div>토픽</div>
-            <div>유닛</div>
+            <div>학습 시간</div>
+            <div>정답률</div>
             <div>상태</div>
             <div />
           </div>
           <ul>
             {worksheets.map((ws, i) => {
-              const info = topicMap.get(ws.topic_id);
               const isLast = i === worksheets.length - 1;
+              const courseName = topicToCourse.get(ws.topic_id) ?? "—";
               return (
                 <li
                   key={ws.id}
-                  className={`grid grid-cols-[140px_1fr_130px_90px_40px] items-center gap-4 px-5 h-16 hover:bg-ink-50/60 transition ${!isLast ? "border-b border-ink-100" : ""}`}
+                  className={`grid grid-cols-[120px_1fr_120px_120px_100px_40px] items-center gap-4 px-5 h-16 hover:bg-ink-50/60 transition ${!isLast ? "border-b border-ink-100" : ""}`}
                 >
                   <div className="text-[12.5px] text-ink-500 tabular-nums whitespace-nowrap">
                     {fmtDate(ws.created_at)}
                   </div>
                   <div className="min-w-0">
                     <div className="text-[13.5px] font-semibold text-ink-900 truncate">{ws.topic_title}</div>
+                    <div className="text-[11.5px] text-ink-500 whitespace-nowrap">{courseName}</div>
                   </div>
-                  <div className="text-[12px] text-ink-500 whitespace-nowrap">
-                    {info ? `Unit ${String(info.index).padStart(2, "0")}` : "—"}
-                  </div>
+                  <div className="text-[12.5px] text-ink-400 whitespace-nowrap">—</div>
+                  <div className="text-[12.5px] text-ink-400 whitespace-nowrap">—</div>
                   <Badge tone="emerald" dot>완료</Badge>
                   <button className="w-8 h-8 rounded-md text-ink-400 hover:bg-ink-100 hover:text-ink-700 flex items-center justify-center">
                     <IDots className="w-4 h-4" />
@@ -606,7 +607,6 @@ function NoCurriculumWelcome({ userName }: { userName: string }) {
       <div className="absolute inset-0 dot-grid opacity-60 pointer-events-none" />
       <div className="absolute -top-16 -right-10 w-64 h-64 rounded-full bg-white/10 blur-2xl" />
       <div className="absolute -bottom-20 left-40 w-72 h-72 rounded-full bg-indigo-400/20 blur-3xl" />
-
       <div className="relative px-8 py-12 flex flex-col items-center text-center">
         <div className="w-16 h-16 rounded-2xl bg-white/15 border border-white/20 flex items-center justify-center mb-6">
           <ISpark className="w-8 h-8 text-white" />
@@ -615,15 +615,13 @@ function NoCurriculumWelcome({ userName }: { userName: string }) {
           안녕하세요, <span className="text-amber-200">{userName}</span>님!
         </h1>
         <p className="mt-3 text-[15px] text-indigo-100/90 leading-relaxed max-w-md">
-          AI 1:1 과외를 시작해볼까요?<br />
-          나만의 맞춤 커리큘럼이 기다리고 있어요.
+          AI 1:1 과외를 시작해볼까요?<br />나만의 맞춤 커리큘럼이 기다리고 있어요.
         </p>
         <Link
           href="/onboarding"
           className="mt-8 h-12 px-8 rounded-xl bg-white text-indigo-700 hover:bg-indigo-50 text-[15px] font-bold inline-flex items-center gap-2 shadow-soft transition"
         >
-          학습 시작하기
-          <IArrow className="w-4 h-4" />
+          학습 시작하기 <IArrow className="w-4 h-4" />
         </Link>
       </div>
     </section>
@@ -639,38 +637,89 @@ export default async function Home() {
 
   const admin = createAdminClient();
 
-  const [profileRes, curriculumRes, worksheetsRes] = await Promise.all([
+  const [profileRes, curriculaRes, worksheetsRes] = await Promise.all([
     admin.from("user_profiles").select("*").eq("id", user.id).single(),
-    admin.from("curricula").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(1).single(),
-    admin.from("worksheets").select("id, topic_id, topic_title, created_at").eq("user_id", user.id).order("created_at", { ascending: false }).limit(10),
+    admin.from("curricula").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
+    admin.from("worksheets").select("id, topic_id, topic_title, created_at").eq("user_id", user.id).order("created_at", { ascending: false }).limit(20),
   ]);
 
-  const profile    = profileRes.data;
-  const curriculum = curriculumRes.data;
-  const worksheets = (worksheetsRes.data ?? []) as WorksheetRow[];
-  const hasCurriculum = !!profile && !!curriculum;
+  const profile     = profileRes.data;
+  const rawCurricula = (curriculaRes.data ?? []) as Record<string, unknown>[];
+  const worksheets  = (worksheetsRes.data ?? []) as WorksheetRow[];
+  const hasCurriculum = rawCurricula.length > 0;
 
-  const topics: TopicRow[] = hasCurriculum && Array.isArray(curriculum!.topics) ? curriculum!.topics as TopicRow[] : [];
-  const currentIndex  = hasCurriculum ? ((profile!.current_topic_index as number) ?? 0) : 0;
-  const totalTopics   = hasCurriculum ? ((curriculum!.total_topics as number) ?? topics.length) : 0;
-  const currentTopic  = topics[currentIndex] as TopicRow | undefined;
-  const prevTopic     = worksheets[0]?.topic_title ?? null;
-  const pct           = totalTopics > 0 ? Math.round((currentIndex / totalTopics) * 100) : 0;
-  const streak        = computeStreak(worksheets);
-  const weekSessions  = countThisWeek(worksheets);
-
-  const subjectMap: Record<string, string> = {
-    "ai-data": "AI · 데이터", "economics": "경제 · 금융", "marketing": "마케팅",
-  };
   const levelMap: Record<string, string> = {
-    "beginner": "초급 · Lv.1", "intermediate": "중급 · Lv.2", "advanced": "고급 · Lv.3",
+    beginner: "초급 · Lv.1", intermediate: "중급 · Lv.2", advanced: "고급 · Lv.3",
+  };
+  const subjectMap: Record<string, string> = {
+    "ai-data": "AI · 데이터", economics: "경제 · 금융", marketing: "마케팅",
   };
 
-  const userName    = (profile?.name as string | null) ?? user.user_metadata?.full_name ?? user.email?.split("@")[0] ?? "학습자";
-  const userField   = profile ? (subjectMap[profile.subject as string] ?? (profile.subject as string) ?? "학습") : "AI 과외";
-  const level       = profile ? (levelMap[profile.current_level as string] ?? (profile.current_level as string) ?? "초급 · Lv.1") : "초급 · Lv.1";
-  const courseTitle = `${userField} 커리큘럼`;
-  const dateLabel   = todayLabel();
+  const userName  = (profile?.name as string | null) ?? user.user_metadata?.full_name ?? user.email?.split("@")[0] ?? "학습자";
+  const userField = profile ? (subjectMap[profile.subject as string] ?? (profile.subject as string) ?? "학습") : "AI 과외";
+  const level     = profile ? (levelMap[profile.current_level as string] ?? (profile.current_level as string) ?? "초급 · Lv.1") : "초급 · Lv.1";
+
+  const streak       = computeStreak(worksheets);
+  const weekSessions = countThisWeek(worksheets);
+  const dateLabel    = todayLabel();
+
+  // Build topicId → course name map for history display
+  const topicToCourse = new Map<string, string>();
+  rawCurricula.forEach((c, idx) => {
+    const topics: TopicRow[] = Array.isArray(c.topics) ? (c.topics as TopicRow[]) : [];
+    const subject   = (c.subject as string) ?? (profile?.subject as string) ?? "";
+    const conf      = SUBJECT_CONFIG[subject];
+    const courseName = conf?.label ?? (c.title as string) ?? `커리큘럼 ${idx + 1}`;
+    topics.forEach((t) => topicToCourse.set(t.topicId, courseName));
+  });
+
+  // Build CurriculumData array for cards
+  const completedTopicIds = new Set(worksheets.map((ws) => ws.topic_id));
+
+  const curriculaData: CurriculumData[] = rawCurricula.map((c, idx) => {
+    const topics: TopicRow[] = Array.isArray(c.topics) ? (c.topics as TopicRow[]) : [];
+    const total = (c.total_topics as number) ?? topics.length;
+
+    // Primary curriculum uses profile index; others count by completed worksheets
+    const done = idx === 0 && profile
+      ? ((profile.current_topic_index as number) ?? 0)
+      : topics.filter((t) => completedTopicIds.has(t.topicId)).length;
+
+    const status: "active" | "done" = done >= total && total > 0 ? "done" : "active";
+    const nextTopic = status === "active" && done < topics.length ? (topics[done]?.title ?? null) : null;
+
+    const subject = (c.subject as string) ?? (profile?.subject as string) ?? "";
+    const conf    = SUBJECT_CONFIG[subject];
+
+    // Last studied: find most recent worksheet matching any topic in this curriculum
+    const topicIds = new Set(topics.map((t) => t.topicId));
+    const lastWs   = worksheets.find((ws) => topicIds.has(ws.topic_id));
+    const lastStudied = lastWs ? relativeDate(lastWs.created_at) : "—";
+
+    return {
+      id:         (c.id as string) ?? String(idx),
+      emoji:      conf?.emoji ?? "📚",
+      title:      (c.title as string) ?? conf?.label ?? `커리큘럼 ${idx + 1}`,
+      subtitle:   `${level} · ${total}개 토픽`,
+      accent:     conf?.accent ?? "brand",
+      total,
+      done,
+      nextTopic,
+      lastStudied,
+      status,
+    };
+  });
+
+  // Estimated total learning time (20 min/session)
+  const totalLearningTime = fmtMins(worksheets.length * 20);
+
+  // For Welcome card
+  const prevTopic = worksheets[0]?.topic_title ?? null;
+  const primaryTopics: TopicRow[] = rawCurricula[0] && Array.isArray(rawCurricula[0].topics)
+    ? (rawCurricula[0].topics as TopicRow[])
+    : [];
+  const primaryIndex = (profile?.current_topic_index as number) ?? 0;
+  const todayTopic   = primaryTopics[primaryIndex]?.title ?? null;
 
   return (
     <div className="min-h-screen w-full flex flex-col bg-ink-100 text-ink-900" style={{ wordBreak: "keep-all", overflowWrap: "break-word" }}>
@@ -685,19 +734,12 @@ export default async function Home() {
                   userName={userName}
                   dateLabel={dateLabel}
                   prevTopic={prevTopic}
-                  todayTopic={currentTopic?.title ?? null}
+                  todayTopic={todayTopic}
                   streak={streak}
                   weekSessions={weekSessions}
                 />
-                <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
-                  <div className="xl:col-span-3">
-                    <ProgressCard done={currentIndex} total={totalTopics} pct={pct} courseTitle={courseTitle} />
-                  </div>
-                  <div className="xl:col-span-2">
-                    <TodayCard topic={currentTopic} />
-                  </div>
-                </div>
-                <HistorySection worksheets={worksheets} topics={topics} currentIndex={currentIndex} />
+                <MyLearningSection curricula={curriculaData} totalLearningTime={totalLearningTime} />
+                <HistorySection worksheets={worksheets} topicToCourse={topicToCourse} />
                 <div className="text-center text-[11px] text-ink-400 pt-2 pb-6">
                   학습 기록은 매일 자정에 자동으로 저장돼요
                 </div>

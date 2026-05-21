@@ -95,7 +95,7 @@ function Header({
   return (
     <header className="shrink-0 border-b border-ink-200 bg-white/90 backdrop-blur z-10">
       <div className="flex items-center gap-3 px-8 h-16">
-        <a href="/dashboard" className="w-9 h-9 rounded-full hover:bg-ink-100 text-ink-700 flex items-center justify-center">
+        <a href="/" className="w-9 h-9 rounded-full hover:bg-ink-100 text-ink-700 flex items-center justify-center">
           <IBack className="w-5 h-5" />
         </a>
         <div className="flex-1 min-w-0 flex items-center gap-3">
@@ -718,7 +718,7 @@ export default function WorksheetPage() {
     setDone(true);
   }
 
-  if (done) return <DoneScreen onHome={() => router.push("/dashboard")} />;
+  if (done) return <DoneScreen onHome={() => router.push("/")} />;
 
   if (error) {
     return (
