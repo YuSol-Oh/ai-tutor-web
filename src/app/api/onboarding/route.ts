@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
     // 유저 프로필 저장
     const profile = {
       id: user.id,
-      name: body.name || user.user_metadata.full_name || "사용자",
+      name: user.user_metadata?.full_name || user.email?.split("@")[0] || "사용자",
       subject: body.subject || "ai-data",
       purpose: body.purpose || "curiosity",
       current_level: body.currentLevel || "beginner",

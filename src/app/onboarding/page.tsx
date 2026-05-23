@@ -4,13 +4,6 @@ import { useRouter } from "next/navigation";
 
 const STEPS = [
   {
-    id: "name",
-    question: "안녕하세요! 먼저 이름을 알려주세요 😊",
-    type: "text",
-    placeholder: "이름을 입력해주세요",
-    required: true,
-  },
-  {
     id: "subject",
     question: "어떤 분야를 배우고 싶으세요?",
     type: "choice",
