@@ -142,10 +142,13 @@ export default function OnboardingPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(finalAnswers),
       });
-      if (!res.ok) throw new Error("서버 오류");
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(data.error || `서버 오류 (${res.status})`);
+      }
       router.push("/curriculum");
-    } catch {
-      setError("오류가 발생했어요. 다시 시도해주세요.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "오류가 발생했어요. 다시 시도해주세요.");
       setLoading(false);
     }
   }

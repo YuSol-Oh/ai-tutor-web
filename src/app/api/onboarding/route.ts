@@ -73,7 +73,7 @@ ${profile.project_context ? `- 프로젝트 맥락: ${profile.project_context}` 
 }`;
 
     const message = await client.messages.create({
-      model: "claude-sonnet-4-5",
+      model: "claude-sonnet-4-6",
       max_tokens: 2000,
       messages: [{ role: "user", content: prompt }],
     });
@@ -90,7 +90,7 @@ ${profile.project_context ? `- 프로젝트 맥락: ${profile.project_context}` 
 
     // 커리큘럼 제목 생성
     const titleMessage = await client.messages.create({
-      model: "claude-sonnet-4-5",
+      model: "claude-sonnet-4-6",
       max_tokens: 50,
       messages: [{
         role: "user",
