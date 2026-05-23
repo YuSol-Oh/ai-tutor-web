@@ -1,9 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect, useMemo } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { supabase } from "@/lib/supabase";
+import AppHeader from "@/components/AppHeader";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -718,95 +717,6 @@ function MainArea({
   );
 }
 
-// ─── Page Header ──────────────────────────────────────────────────────────────
-
-function LogoutBtn() {
-  const router = useRouter();
-  async function handleLogout() {
-    await supabase.auth.signOut();
-    router.push("/login");
-    router.refresh();
-  }
-  return (
-    <button
-      onClick={handleLogout}
-      className="ml-1 h-9 px-3 rounded-lg text-[12.5px] font-medium text-ink-600 hover:bg-ink-100 inline-flex items-center gap-1.5 whitespace-nowrap shrink-0"
-    >
-      <ILogout className="w-4 h-4" />
-      로그아웃
-    </button>
-  );
-}
-
-function PageHeader({
-  userName, userField, courseTitle,
-}: {
-  userName: string;
-  userField: string;
-  courseTitle: string;
-}) {
-  const initial = userName.charAt(0);
-  return (
-    <header className="shrink-0 border-b border-ink-200 bg-white/90 backdrop-blur z-20">
-      <div className="flex items-center gap-3 px-8 h-16">
-        {/* Logo */}
-        <Link href="/" className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-500 to-brand-700 flex items-center justify-center text-white shadow-soft">
-            <ISpark className="w-4 h-4" />
-          </div>
-          <div className="leading-tight">
-            <div className="text-[15px] font-bold tracking-tight text-ink-900">
-              Tutor<span className="text-brand-600">.</span>
-            </div>
-            <div className="text-[10px] font-medium text-ink-400 -mt-0.5">AI 1:1 과외</div>
-          </div>
-        </Link>
-
-        {/* Nav */}
-        <nav className="ml-6 hidden lg:flex items-center gap-1 text-[13px]">
-          <Link href="/" className="px-3 h-9 inline-flex items-center rounded-lg text-ink-600 hover:bg-ink-50 whitespace-nowrap">
-            대시보드
-          </Link>
-          <span className="px-3 h-9 inline-flex items-center rounded-lg text-ink-900 font-semibold bg-ink-100 whitespace-nowrap">
-            커리큘럼
-          </span>
-          <Link href="/" className="px-3 h-9 inline-flex items-center rounded-lg text-ink-600 hover:bg-ink-50 whitespace-nowrap">
-            학습 기록
-          </Link>
-          <Link href="/" className="px-3 h-9 inline-flex items-center rounded-lg text-ink-600 hover:bg-ink-50 whitespace-nowrap">
-            설정
-          </Link>
-        </nav>
-
-        {/* Breadcrumb */}
-        <div className="ml-4 hidden xl:flex items-center gap-2 text-[12.5px] text-ink-500 min-w-0">
-          <span className="text-ink-300">/</span>
-          <Link href="/" className="hover:text-ink-700 whitespace-nowrap">내 학습</Link>
-          <span className="text-ink-300">/</span>
-          <span className="text-ink-900 font-medium whitespace-nowrap truncate">{courseTitle}</span>
-        </div>
-
-        <div className="flex-1" />
-
-        <button className="w-9 h-9 rounded-full text-ink-500 hover:bg-ink-100 flex items-center justify-center shrink-0">
-          <IBell className="w-5 h-5" />
-        </button>
-
-        <div className="flex items-center gap-2.5 pl-3 ml-1 border-l border-ink-200 h-9 shrink-0">
-          <div className="w-8 h-8 rounded-full bg-ink-100 text-ink-700 flex items-center justify-center font-semibold text-[13px]">
-            {initial}
-          </div>
-          <div className="leading-tight">
-            <div className="text-[13px] font-semibold text-ink-900 whitespace-nowrap">{userName}님</div>
-            <div className="text-[11px] text-ink-500 whitespace-nowrap">{userField}</div>
-          </div>
-        </div>
-
-        <LogoutBtn />
-      </div>
-    </header>
-  );
-}
 
 // ─── Root Component ───────────────────────────────────────────────────────────
 
@@ -825,7 +735,7 @@ export default function CurriculumDetailClient({
       className="h-screen w-full flex flex-col bg-white text-ink-900 overflow-hidden"
       style={{ wordBreak: "keep-all", overflowWrap: "break-word" }}
     >
-      <PageHeader userName={userName} userField={userField} courseTitle={courseTitle} />
+      <AppHeader userName={userName} userField={userField} breadcrumbTitle={courseTitle} />
       <div className="flex-1 min-h-0 flex">
         <Sidebar
           topics={topics}

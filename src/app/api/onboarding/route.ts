@@ -88,6 +88,19 @@ ${profile.project_context ? `- 프로젝트 맥락: ${profile.project_context}` 
       topics = JSON.parse(match[1]).topics;
     }
 
+    // 커리큘럼 제목 생성
+    const titleMessage = await client.messages.create({
+      model: "claude-sonnet-4-5",
+      max_tokens: 50,
+      messages: [{
+        role: "user",
+        content: `아래 토픽 목록을 보고 이 커리큘럼의 핵심 주제를 담은 짧은 제목을 한국어로 만들어줘. 10자 이내로, 제목만 출력해줘.\n토픽 목록: ${(topics as { title: string }[]).map((t) => t.title).join(", ")}`,
+      }],
+    });
+    const title = titleMessage.content[0].type === "text"
+      ? titleMessage.content[0].text.trim()
+      : profile.subject;
+
     const { error: curriculumError } = await admin
       .from("curricula")
       .insert({
@@ -96,6 +109,7 @@ ${profile.project_context ? `- 프로젝트 맥락: ${profile.project_context}` 
         mode: profile.mode,
         total_topics: topics.length,
         topics,
+        title,
         adjustment_history: [],
       });
 

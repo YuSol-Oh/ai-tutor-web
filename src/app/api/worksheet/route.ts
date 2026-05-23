@@ -12,6 +12,35 @@ export async function GET(req: NextRequest) {
     const admin = createAdminClient();
     const today = new Date().toISOString().split("T")[0];
 
+    // 복습 모드: 어제 학습지 반환
+    const url = new URL(req.url);
+    if (url.searchParams.get("review") === "true") {
+      const yesterday = new Date(Date.now() - 86400000).toISOString().split("T")[0];
+      const { data: yesterdayWs } = await admin
+        .from("worksheets")
+        .select("*")
+        .eq("user_id", user.id)
+        .gte("created_at", `${yesterday}T00:00:00Z`)
+        .lt("created_at", `${today}T00:00:00Z`)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .single();
+
+      if (!yesterdayWs) return NextResponse.json({ error: "no yesterday worksheet" }, { status: 404 });
+
+      return NextResponse.json({
+        ...yesterdayWs,
+        worksheetId: yesterdayWs.id,
+        topicId: yesterdayWs.topic_id,
+        topicTitle: yesterdayWs.topic_title,
+        conceptSummary: yesterdayWs.concept_summary,
+        realWorldExample: yesterdayWs.real_world_example,
+        handsOnTask: yesterdayWs.hands_on_task,
+        userId: yesterdayWs.user_id,
+        createdAt: yesterdayWs.created_at,
+      });
+    }
+
     // 오늘 학습지가 이미 있으면 반환
     const { data: existing } = await admin
       .from("worksheets")
@@ -96,7 +125,7 @@ export async function GET(req: NextRequest) {
 {
   "topicId": "${currentTopic.topicId}",
   "topicTitle": "${currentTopic.title}",
-  "conceptSummary": "핵심 개념 3~5줄 압축 설명",
+  "conceptSummary": "핵심 개념 한 페이지 설명",
   "realWorldExample": "실생활/업무 연결 예시",
   "questions": [
     {

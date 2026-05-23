@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import { Worksheet, Question, HandsOnTask } from "@/types";
 
@@ -40,7 +40,7 @@ function IClip(p: React.SVGProps<SVGSVGElement>) {
 
 // ─── Atoms ────────────────────────────────────────────────────────────────────
 
-type BadgeTone = "ink" | "brand" | "amber" | "emerald" | "rose";
+type BadgeTone = "ink" | "brand" | "amber" | "emerald" | "rose" | "violet";
 
 function Badge({ tone = "ink", children }: { tone?: BadgeTone; children: React.ReactNode }) {
   const tones: Record<BadgeTone, string> = {
@@ -49,6 +49,7 @@ function Badge({ tone = "ink", children }: { tone?: BadgeTone; children: React.R
     amber:   "bg-amber-50 text-amber-700 border-amber-200",
     emerald: "bg-emerald-50 text-emerald-700 border-emerald-200",
     rose:    "bg-rose-50 text-rose-700 border-rose-200",
+    violet:  "bg-violet-50 text-violet-700 border-violet-200",
   };
   return (
     <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border whitespace-nowrap shrink-0 ${tones[tone]}`}>
@@ -78,16 +79,45 @@ function typeLabel(type: Question["type"]) {
   return type === "multiple-choice" ? "객관식" : type === "short-answer" ? "단답형" : "서술형";
 }
 
+// ─── Skip Modal ───────────────────────────────────────────────────────────────
+
+function SkipModal({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-card p-7 max-w-sm w-full mx-4">
+        <h2 className="text-[17px] font-bold text-ink-900">오늘 학습을 건너뛸까요?</h2>
+        <p className="mt-2 text-[13.5px] text-ink-600 leading-relaxed">
+          건너뛰면 다음 토픽으로 넘어가고, 오늘 학습 기회는 지나가요. 계속할까요?
+        </p>
+        <div className="mt-6 flex gap-2.5">
+          <button
+            onClick={onCancel}
+            className="flex-1 h-11 rounded-xl border border-ink-200 hover:bg-ink-50 text-[13.5px] font-medium text-ink-700 transition whitespace-nowrap"
+          >
+            계속 학습하기
+          </button>
+          <button
+            onClick={onConfirm}
+            className="flex-1 h-11 rounded-xl bg-ink-900 hover:bg-ink-700 text-white text-[13.5px] font-semibold transition whitespace-nowrap"
+          >
+            건너뛰기
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Header ──────────────────────────────────────────────────────────────────
 
 function Header({
-  worksheet,
-  loading,
-  answeredCount,
+  worksheet, loading, answeredCount, isReview, onSkip,
 }: {
   worksheet: WorksheetData | null;
   loading: boolean;
   answeredCount: number;
+  isReview: boolean;
+  onSkip: () => void;
 }) {
   const totalQ = worksheet?.questions.length ?? 0;
   const progressPct = totalQ > 0 ? Math.round((answeredCount / totalQ) * 100) : 0;
@@ -104,7 +134,11 @@ function Header({
               <span className="text-[15.5px] font-semibold text-ink-900 truncate">
                 {loading ? "학습지 준비 중..." : (worksheet?.topicTitle ?? "오늘의 학습")}
               </span>
-              {!loading && <Badge tone="brand">학습 중</Badge>}
+              {!loading && (
+                isReview
+                  ? <Badge tone="violet">복습 모드</Badge>
+                  : <Badge tone="brand">학습 중</Badge>
+              )}
             </div>
             <div className="text-[12px] text-ink-500 mt-0.5 truncate">
               {loading ? "AI가 맞춤 문제를 만들고 있어요" : `문제 ${totalQ}개 · 예상 학습 시간 ${worksheet?.questions.length ? worksheet.questions.length * 5 : 20}분`}
@@ -112,7 +146,14 @@ function Header({
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <button className="h-9 px-3 rounded-lg text-[13px] font-medium text-ink-700 hover:bg-ink-100 transition whitespace-nowrap shrink-0">건너뛰기</button>
+          {!isReview && (
+            <button
+              onClick={onSkip}
+              className="h-9 px-3 rounded-lg text-[13px] font-medium text-ink-700 hover:bg-ink-100 transition whitespace-nowrap shrink-0"
+            >
+              건너뛰기
+            </button>
+          )}
           <div className="flex items-center gap-2 pl-3 border-l border-ink-200 h-8 shrink-0">
             <Avatar size={28} />
             <span className="text-[12.5px] text-ink-700 font-medium whitespace-nowrap">AI 튜터</span>
@@ -177,7 +218,6 @@ function LeftPanel({ worksheet }: { worksheet: WorksheetData | null }) {
         <LeftPanelSkeleton />
       ) : (
         <div className="px-9 py-8">
-          {/* topic header */}
           <div className="flex items-center gap-2 text-[12px] font-semibold text-brand-600 whitespace-nowrap">
             <span className="tracking-wide uppercase">오늘의 학습</span>
           </div>
@@ -185,7 +225,6 @@ function LeftPanel({ worksheet }: { worksheet: WorksheetData | null }) {
             {worksheet.topicTitle}
           </h1>
 
-          {/* core concept */}
           <section className="mt-8">
             <h2 className="text-[15px] font-bold text-ink-900 flex items-center gap-2 whitespace-nowrap">
               <span className="w-1 h-4 rounded-full bg-brand-600 shrink-0" />
@@ -196,7 +235,6 @@ function LeftPanel({ worksheet }: { worksheet: WorksheetData | null }) {
             </div>
           </section>
 
-          {/* real world example */}
           <section className="mt-8">
             <div className="rounded-2xl bg-brand-50 border border-brand-100 p-5">
               <div className="flex items-center gap-2 text-[12px] font-semibold text-brand-700 whitespace-nowrap">
@@ -220,7 +258,6 @@ function LoadingRight() {
   return (
     <main className="flex-1 bg-ink-50/60 overflow-y-auto">
       <div className="px-10 py-8 space-y-6">
-        {/* generation banner */}
         <div className="rounded-2xl border border-brand-100 bg-white p-5 shadow-soft">
           <div className="flex items-start gap-3">
             <div className="relative">
@@ -260,7 +297,6 @@ function LoadingRight() {
           </div>
         </div>
 
-        {/* skeleton question card */}
         <div className="rounded-2xl border border-ink-200 bg-white p-6 shadow-soft">
           <div className="flex items-center gap-2">
             <Skel w={64} h={20} /><Skel w={56} h={20} />
@@ -281,7 +317,6 @@ function LoadingRight() {
           </div>
         </div>
 
-        {/* skeleton task */}
         <div className="rounded-2xl border border-ink-200 bg-white p-5 shadow-soft">
           <div className="flex items-center justify-between">
             <Skel w={180} h={16} /><Skel w={20} h={16} />
@@ -394,8 +429,6 @@ function QuestionCard({
     if (hintsUsed < 3) setHintsUsed((h) => h + 1);
   }
 
-  const currentHint = hintsUsed > 0 ? question.hints[hintsUsed - 1] : null;
-
   return (
     <article className="rounded-2xl border border-ink-200 bg-white p-7 shadow-soft">
       <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -412,20 +445,22 @@ function QuestionCard({
         {question.text}
       </h3>
 
-      {/* hint bubble */}
-      {currentHint && (
-        <div className="mt-5 flex gap-3 items-start">
-          <div className="w-7 h-7 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
-            <IBulb className="w-4 h-4" />
-          </div>
-          <div className="flex-1 rounded-2xl rounded-tl-md bg-amber-50 border border-amber-200 px-4 py-3">
-            <div className="text-[11.5px] font-bold text-amber-800 uppercase tracking-wide">힌트 {hintsUsed}</div>
-            <p className="mt-1 text-[13.5px] text-amber-900 leading-relaxed">{currentHint}</p>
-          </div>
+      {hintsUsed > 0 && (
+        <div className="mt-5 space-y-2">
+          {question.hints.slice(0, hintsUsed).map((hint, i) => (
+            <div key={i} className="flex gap-3 items-start">
+              <div className="w-7 h-7 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                <IBulb className="w-4 h-4" />
+              </div>
+              <div className="flex-1 rounded-2xl rounded-tl-md bg-amber-50 border border-amber-200 px-4 py-3">
+                <div className="text-[11.5px] font-bold text-amber-800 uppercase tracking-wide">힌트 {i + 1}</div>
+                <p className="mt-1 text-[13.5px] text-amber-900 leading-relaxed">{hint}</p>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
-      {/* MCQ options */}
       {question.type === "multiple-choice" && question.choices && (
         <div className="mt-5 space-y-2.5">
           {question.choices.map((o) => (
@@ -441,7 +476,6 @@ function QuestionCard({
         </div>
       )}
 
-      {/* text answer */}
       {question.type !== "multiple-choice" && qState === "idle" && (
         <div className="mt-5 rounded-xl border border-ink-200 bg-ink-50 p-3 focus-within:bg-white focus-within:border-brand-400 transition">
           <textarea
@@ -454,7 +488,6 @@ function QuestionCard({
         </div>
       )}
 
-      {/* footer */}
       <div className="mt-6 flex items-center justify-between gap-3">
         <button
           onClick={showHint}
@@ -488,7 +521,6 @@ function QuestionCard({
         )}
       </div>
 
-      {/* feedback */}
       {qState === "answered" && result && (
         <div className={`mt-5 rounded-xl border p-4 ${
           result.isCorrect ? "border-emerald-200 bg-emerald-50" : "border-rose-200 bg-rose-50"
@@ -601,13 +633,12 @@ function TaskAccordion({ task }: { task: HandsOnTask }) {
 // ─── Complete Right Panel ─────────────────────────────────────────────────────
 
 function CompleteRight({
-  worksheet,
-  onComplete,
-  onAnswered,
+  worksheet, onComplete, onAnswered, isReview,
 }: {
   worksheet: WorksheetData;
   onComplete: () => void;
   onAnswered: () => void;
+  isReview: boolean;
 }) {
   const [activeIdx, setActiveIdx] = useState(0);
   const questions = worksheet.questions;
@@ -646,17 +677,19 @@ function CompleteRight({
           <TaskAccordion task={worksheet.handsOnTask} />
         )}
 
-        {/* completion CTA */}
         <div className="pt-2 pb-1 flex items-center justify-between gap-3">
           <div className="text-[13px] text-ink-500 min-w-0">
-            <span className="text-ink-900 font-semibold">잘하고 있어요!</span> 오늘 학습을 완료하면 다음 토픽으로 넘어가요.
+            <span className="text-ink-900 font-semibold">잘하고 있어요!</span>
+            {isReview
+              ? " 복습을 완료하면 홈으로 돌아가요."
+              : " 오늘 학습을 완료하면 다음 토픽으로 넘어가요."}
           </div>
           <button
             onClick={onComplete}
             className="h-12 px-6 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-[14.5px] font-semibold inline-flex items-center gap-2 shadow-soft transition active:scale-[0.99] whitespace-nowrap shrink-0"
           >
             <ICheck className="w-4 h-4" />
-            오늘 학습 완료!
+            {isReview ? "복습 완료!" : "오늘 학습 완료!"}
             <IArrow className="w-4 h-4" />
           </button>
         </div>
@@ -687,18 +720,23 @@ function DoneScreen({ onHome }: { onHome: () => void }) {
   );
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
+// ─── Worksheet Content (inner, uses useSearchParams) ─────────────────────────
 
-export default function WorksheetPage() {
+function WorksheetContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isReview = searchParams.get("review") === "true";
+
   const [worksheet, setWorksheet] = useState<WorksheetData | null>(null);
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState<string | null>(null);
   const [done, setDone]           = useState(false);
   const [answeredCount, setAnsweredCount] = useState(0);
+  const [showSkipModal, setShowSkipModal] = useState(false);
 
   useEffect(() => {
-    fetch("/api/worksheet")
+    const url = isReview ? "/api/worksheet?review=true" : "/api/worksheet";
+    fetch(url)
       .then((r) => {
         if (!r.ok) throw new Error("학습지를 불러올 수 없어요.");
         return r.json();
@@ -711,11 +749,21 @@ export default function WorksheetPage() {
         setError(e.message);
         setLoading(false);
       });
-  }, []);
+  }, [isReview]);
 
   async function handleComplete() {
+    if (isReview) {
+      router.push("/");
+    } else {
+      await fetch("/api/complete", { method: "POST" });
+      setDone(true);
+    }
+  }
+
+  async function handleSkipConfirm() {
+    setShowSkipModal(false);
     await fetch("/api/complete", { method: "POST" });
-    setDone(true);
+    router.push("/");
   }
 
   if (done) return <DoneScreen onHome={() => router.push("/")} />;
@@ -738,7 +786,19 @@ export default function WorksheetPage() {
 
   return (
     <div className="ls-frame w-screen h-screen flex flex-col bg-white overflow-hidden">
-      <Header worksheet={worksheet} loading={loading} answeredCount={answeredCount} />
+      {showSkipModal && (
+        <SkipModal
+          onConfirm={handleSkipConfirm}
+          onCancel={() => setShowSkipModal(false)}
+        />
+      )}
+      <Header
+        worksheet={worksheet}
+        loading={loading}
+        answeredCount={answeredCount}
+        isReview={isReview}
+        onSkip={() => setShowSkipModal(true)}
+      />
       <div className="flex-1 min-h-0 flex overflow-hidden">
         <LeftPanel worksheet={worksheet} />
         {loading
@@ -747,9 +807,27 @@ export default function WorksheetPage() {
               worksheet={worksheet!}
               onComplete={handleComplete}
               onAnswered={() => setAnsweredCount((c) => c + 1)}
+              isReview={isReview}
             />
         }
       </div>
     </div>
+  );
+}
+
+// ─── Page (Suspense wrapper for useSearchParams) ──────────────────────────────
+
+export default function WorksheetPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-ink-50">
+        <div className="text-center">
+          <div className="w-10 h-10 rounded-full border-4 border-brand-600 border-t-transparent animate-spin mx-auto mb-4" />
+          <p className="text-ink-500 text-[14px]">로딩 중…</p>
+        </div>
+      </div>
+    }>
+      <WorksheetContent />
+    </Suspense>
   );
 }
