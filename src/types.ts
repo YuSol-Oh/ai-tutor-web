@@ -22,10 +22,7 @@ export type LearningPace =
   | "fast"           // 빠르게 훑기
   | "deep";          // 깊게 이해하기
 
-export type Subject =
-  | "ai-data"        // AI·데이터 기초
-  | "economics"      // 경제·금융 기초
-  | "marketing";     // 마케팅 기초
+export type Subject = string;
 
 export type LearningMode =
   | "curriculum"     // 처음부터 체계적으로

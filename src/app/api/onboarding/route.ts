@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
     const profile = {
       id: user.id,
       name: user.user_metadata?.full_name || user.email?.split("@")[0] || "사용자",
-      subject: body.subject || "ai-data",
+      subject: String(body.subject || ""),
       purpose: body.purpose || "curiosity",
       current_level: body.currentLevel || "beginner",
       interested_topics: body.interestedTopics

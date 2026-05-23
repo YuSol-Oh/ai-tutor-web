@@ -6,13 +6,9 @@ const STEPS = [
   {
     id: "subject",
     question: "어떤 분야를 배우고 싶으세요?",
-    type: "choice",
+    type: "text",
+    placeholder: "예: 머신러닝, 온톨로지, 블록체인, 부동산 투자, UX 디자인 등",
     required: true,
-    choices: [
-      { value: "ai-data", label: "🤖 AI · 데이터 기초" },
-      { value: "economics", label: "💰 경제 · 금융 기초" },
-      { value: "marketing", label: "📢 마케팅 기초" },
-    ],
   },
   {
     id: "purpose",
