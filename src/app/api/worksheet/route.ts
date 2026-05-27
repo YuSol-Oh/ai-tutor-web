@@ -3,6 +3,31 @@ import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createAdminClient } from "@/lib/supabase";
 import Anthropic from "@anthropic-ai/sdk";
 
+function parseWorksheetFromText(text: string) {
+  // 전략 1: ```json ... ``` 펜스드 블록 추출
+  const fenceMatch = text.match(/```json\s*([\s\S]*?)\s*```/);
+  if (fenceMatch) {
+    try { return JSON.parse(fenceMatch[1]); } catch {}
+  }
+
+  // 전략 2: ``` ... ``` 펜스드 블록 추출 (json 없이)
+  const fenceMatch2 = text.match(/```\s*([\s\S]*?)\s*```/);
+  if (fenceMatch2) {
+    try { return JSON.parse(fenceMatch2[1]); } catch {}
+  }
+
+  // 전략 3: 직접 JSON.parse
+  try { return JSON.parse(text); } catch {}
+
+  // 전략 4: 첫 번째 { ... } 추출
+  const braceMatch = text.match(/\{[\s\S]*\}/);
+  if (braceMatch) {
+    try { return JSON.parse(braceMatch[0]); } catch {}
+  }
+
+  return null;
+}
+
 export async function GET(req: NextRequest) {
   try {
     const supabase = await createSupabaseServerClient();
@@ -158,25 +183,10 @@ export async function GET(req: NextRequest) {
     });
 
     const text = message.content[0].type === "text" ? message.content[0].text : "";
-    let worksheetData;
-
-    // Strategy 1: raw JSON
-    try { worksheetData = JSON.parse(text); } catch {}
-
-    // Strategy 2: ```json ... ``` code block
-    if (!worksheetData) {
-      const fenced = text.match(/```(?:json)?\n?([\s\S]*?)\n?```/);
-      if (fenced) { try { worksheetData = JSON.parse(fenced[1]); } catch {} }
-    }
-
-    // Strategy 3: first { ... } object in text
-    if (!worksheetData) {
-      const objMatch = text.match(/\{[\s\S]*\}/);
-      if (objMatch) { try { worksheetData = JSON.parse(objMatch[0]); } catch {} }
-    }
+    const worksheetData = parseWorksheetFromText(text);
 
     if (!worksheetData) {
-      return NextResponse.json({ error: `[파싱 실패] Claude 응답: ${text.slice(0, 300)}` }, { status: 500 });
+      return NextResponse.json({ error: `[파싱 실패] Claude 응답: ${text.slice(0, 500)}` }, { status: 500 });
     }
 
     // Supabase에 저장

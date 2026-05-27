@@ -256,7 +256,7 @@ function LeftPanel({ worksheet }: { worksheet: WorksheetData | null }) {
 
 function LoadingRight() {
   return (
-    <main className="flex-1 bg-ink-50/60 overflow-y-auto">
+    <main className="flex-1 bg-ink-50 overflow-y-auto">
       <div className="px-10 py-8 space-y-6">
         <div className="rounded-2xl border border-brand-100 bg-white p-5 shadow-soft">
           <div className="flex items-start gap-3">
@@ -651,7 +651,7 @@ function CompleteRight({
   }
 
   return (
-    <main className="flex-1 bg-ink-50/60 overflow-y-auto">
+    <main className="flex-1 bg-ink-50 overflow-y-auto">
       <div className="px-10 py-8 space-y-6">
         {questions.map((q, i) => (
           i <= activeIdx ? (

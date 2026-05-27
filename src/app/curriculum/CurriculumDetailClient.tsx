@@ -11,7 +11,7 @@ type FilterKey = "all" | "active" | "done";
 
 type ChatMsg =
   | { type: "ai-intro" }
-  | { type: "ai-revise"; summary: string; changes: string[] }
+  | { type: "ai-revise"; summary: string; changes: string[]; topics: TopicItem[] }
   | { type: "user"; text: string };
 
 export interface TopicItem {
@@ -86,6 +86,9 @@ function ISend(p: React.SVGProps<SVGSVGElement>) {
 }
 function IClock(p: React.SVGProps<SVGSVGElement>) {
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...p}><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>;
+}
+function IChevron(p: React.SVGProps<SVGSVGElement>) {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M6 9l6 6 6-6"/></svg>;
 }
 function ILock(p: React.SVGProps<SVGSVGElement>) {
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...p}><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>;
@@ -176,6 +179,62 @@ function TopicListItem({
         </div>
       </div>
     </button>
+  );
+}
+
+// ─── Topic Accordion List ─────────────────────────────────────────────────────
+
+function TopicAccordionList({
+  topics,
+  currentTopicIndex,
+  onSelect,
+}: {
+  topics: TopicItem[];
+  currentTopicIndex: number;
+  onSelect: (idx: number) => void;
+}) {
+  const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
+
+  return (
+    <div className="mt-3 max-h-[280px] overflow-y-auto thin-scroll rounded-xl border border-ink-200 divide-y divide-ink-100">
+      {topics.map((topic, idx) => {
+        const status = topicStatus(idx, currentTopicIndex);
+        const isExpanded = expandedIdx === idx;
+        return (
+          <div key={topic.topicId} className="bg-white">
+            <button
+              onClick={() => {
+                setExpandedIdx(isExpanded ? null : idx);
+                onSelect(idx);
+              }}
+              className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-ink-50 transition-colors"
+            >
+              <StatusIcon status={status} />
+              <div className="flex-1 min-w-0">
+                <span className="text-[10.5px] font-bold uppercase tabular-nums text-ink-400 tracking-wider">
+                  #{String(idx + 1).padStart(2, "0")}
+                </span>
+                <div className="text-[13px] font-semibold text-ink-900 leading-snug truncate">
+                  {topic.title}
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-[11px] text-ink-400 whitespace-nowrap flex items-center gap-1">
+                  <IClock className="w-3 h-3" />
+                  {topic.estimatedMinutes}분
+                </span>
+                <IChevron className={`w-4 h-4 text-ink-400 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
+              </div>
+            </button>
+            {isExpanded && (
+              <div className="px-4 pb-3 pt-1.5 text-[13px] text-ink-600 leading-relaxed bg-ink-50 border-t border-ink-100">
+                {topic.description}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -510,13 +569,14 @@ function MainArea({
         body: JSON.stringify({ feedback: value }),
       });
       if (!res.ok) throw new Error("수정 요청에 실패했어요.");
-      const data = await res.json() as { revisionSummary?: string; revisionChanges?: string[] };
+      const data = await res.json() as { revisionSummary?: string; revisionChanges?: string[]; topics?: TopicItem[] };
       setMessages((m) => [
         ...m,
         {
           type: "ai-revise",
           summary: data.revisionSummary ?? "커리큘럼을 수정했어요.",
           changes: data.revisionChanges ?? [],
+          topics: data.topics ?? [],
         },
       ]);
     } catch (e: unknown) {
@@ -526,6 +586,7 @@ function MainArea({
           type: "ai-revise",
           summary: e instanceof Error ? e.message : "오류가 발생했어요.",
           changes: [],
+          topics: [],
         },
       ]);
     } finally {
@@ -588,8 +649,13 @@ function MainArea({
                       안녕하세요! 설문을 바탕으로 <b>{courseTitle}</b> 커리큘럼을 만들었어요 😊
                     </p>
                     <p className="mt-1.5 text-ink-700">
-                      {courseMeta} 기준으로 구성됐어요. 왼쪽 목록에서 각 토픽을 눌러 자세한 내용을 확인하고, 수정이 필요하면 아래에 알려주세요.
+                      {courseMeta} 기준으로 구성됐어요. 아래 목록에서 각 토픽을 클릭해 내용을 확인하고, 수정이 필요하면 아래에 알려주세요.
                     </p>
+                    <TopicAccordionList
+                      topics={topics}
+                      currentTopicIndex={currentTopicIndex}
+                      onSelect={onSelect}
+                    />
                   </AIBubble>
                 );
               }
@@ -609,6 +675,13 @@ function MainArea({
                           </li>
                         ))}
                       </ul>
+                    )}
+                    {msg.topics.length > 0 && (
+                      <TopicAccordionList
+                        topics={msg.topics}
+                        currentTopicIndex={currentTopicIndex}
+                        onSelect={onSelect}
+                      />
                     )}
                   </AIBubble>
                 );
