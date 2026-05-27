@@ -153,18 +153,30 @@ export async function GET(req: NextRequest) {
 
     const message = await client.messages.create({
       model: "claude-sonnet-4-6",
-      max_tokens: 3000,
+      max_tokens: 4096,
       messages: [{ role: "user", content: prompt }],
     });
 
     const text = message.content[0].type === "text" ? message.content[0].text : "";
     let worksheetData;
-    try {
-      worksheetData = JSON.parse(text);
-    } catch {
-      const match = text.match(/```json\n?([\s\S]*?)\n?```/);
-      if (!match) return NextResponse.json({ error: "파싱 실패: " + text }, { status: 500 });
-      worksheetData = JSON.parse(match[1]);
+
+    // Strategy 1: raw JSON
+    try { worksheetData = JSON.parse(text); } catch {}
+
+    // Strategy 2: ```json ... ``` code block
+    if (!worksheetData) {
+      const fenced = text.match(/```(?:json)?\n?([\s\S]*?)\n?```/);
+      if (fenced) { try { worksheetData = JSON.parse(fenced[1]); } catch {} }
+    }
+
+    // Strategy 3: first { ... } object in text
+    if (!worksheetData) {
+      const objMatch = text.match(/\{[\s\S]*\}/);
+      if (objMatch) { try { worksheetData = JSON.parse(objMatch[0]); } catch {} }
+    }
+
+    if (!worksheetData) {
+      return NextResponse.json({ error: `[파싱 실패] Claude 응답: ${text.slice(0, 300)}` }, { status: 500 });
     }
 
     // Supabase에 저장

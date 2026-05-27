@@ -737,8 +737,11 @@ function WorksheetContent() {
   useEffect(() => {
     const url = isReview ? "/api/worksheet?review=true" : "/api/worksheet";
     fetch(url)
-      .then((r) => {
-        if (!r.ok) throw new Error("학습지를 불러올 수 없어요.");
+      .then(async (r) => {
+        if (!r.ok) {
+          const data = await r.json().catch(() => ({})) as { error?: string };
+          throw new Error(data.error || `서버 오류 (${r.status})`);
+        }
         return r.json();
       })
       .then((data: WorksheetData) => {
