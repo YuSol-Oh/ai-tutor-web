@@ -47,6 +47,9 @@ function IDots(p: React.SVGProps<SVGSVGElement>) {
 function IPlus(p: React.SVGProps<SVGSVGElement>) {
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M12 5v14M5 12h14"/></svg>;
 }
+function ITrash(p: React.SVGProps<SVGSVGElement>) {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>;
+}
 
 // ─── Badge ────────────────────────────────────────────────────────────────────
 
@@ -69,9 +72,53 @@ function Badge({ tone = "ink", dot = false, children }: { tone?: BadgeTone; dot?
   );
 }
 
+// ─── Delete Modal ─────────────────────────────────────────────────────────────
+
+function DeleteModal({
+  onConfirm, onCancel, deleting,
+}: {
+  onConfirm: () => void;
+  onCancel: () => void;
+  deleting: boolean;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-card p-7 max-w-sm w-full mx-4">
+        <h2 className="text-[17px] font-bold text-ink-900">커리큘럼을 삭제할까요?</h2>
+        <p className="mt-2 text-[13.5px] text-ink-600 leading-relaxed">
+          정말 삭제할까요? 학습 기록도 함께 삭제됩니다.
+        </p>
+        <div className="mt-6 flex gap-2.5">
+          <button
+            onClick={onCancel}
+            disabled={deleting}
+            className="flex-1 h-11 rounded-xl border border-ink-200 hover:bg-ink-50 text-[13.5px] font-medium text-ink-700 transition disabled:opacity-50 whitespace-nowrap"
+          >
+            취소
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={deleting}
+            className="flex-1 h-11 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-[13.5px] font-semibold transition disabled:opacity-50 whitespace-nowrap"
+          >
+            {deleting ? "삭제 중..." : "삭제"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Curriculum Card ──────────────────────────────────────────────────────────
 
-function CurriculumCard({ c }: { c: CurriculumData }) {
+function CurriculumCard({
+  c, menuOpen, onMenuToggle, onDeleteRequest,
+}: {
+  c: CurriculumData;
+  menuOpen: boolean;
+  onMenuToggle: () => void;
+  onDeleteRequest: () => void;
+}) {
   const pct = c.total > 0 ? Math.round((c.done / c.total) * 100) : 0;
   const a = ACCENTS[c.accent] ?? ACCENTS.brand;
   const completed = c.status === "done";
@@ -94,9 +141,42 @@ function CurriculumCard({ c }: { c: CurriculumData }) {
           </h3>
           <div className="mt-0.5 text-[12px] text-ink-500 truncate">{c.subtitle}</div>
         </div>
-        <button className="opacity-0 group-hover:opacity-100 transition w-7 h-7 rounded-md text-ink-400 hover:bg-ink-100 hover:text-ink-700 flex items-center justify-center shrink-0">
-          <IDots className="w-4 h-4" />
-        </button>
+
+        {/* ··· 메뉴 버튼 + 드롭다운 */}
+        <div className="relative shrink-0">
+          <button
+            onClick={(e) => { e.stopPropagation(); onMenuToggle(); }}
+            className={`transition w-7 h-7 rounded-md flex items-center justify-center ${
+              menuOpen
+                ? "opacity-100 bg-ink-100 text-ink-700"
+                : "opacity-0 group-hover:opacity-100 text-ink-400 hover:bg-ink-100 hover:text-ink-700"
+            }`}
+          >
+            <IDots className="w-4 h-4" />
+          </button>
+
+          {menuOpen && (
+            <div
+              className="absolute right-0 top-8 z-20 w-44 rounded-xl border border-ink-200 bg-white shadow-card py-1 text-[13px]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <Link
+                href={`/curriculum?id=${c.id}`}
+                onClick={onMenuToggle}
+                className="flex items-center gap-2 px-4 py-2.5 hover:bg-ink-50 text-ink-700 transition whitespace-nowrap"
+              >
+                커리큘럼 보기
+              </Link>
+              <button
+                onClick={() => { onMenuToggle(); onDeleteRequest(); }}
+                className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-rose-50 text-rose-600 transition whitespace-nowrap"
+              >
+                <ITrash className="w-3.5 h-3.5 shrink-0" />
+                삭제하기
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="mt-5">
@@ -179,6 +259,9 @@ export default function MyLearningSection({
   totalLearningTime: string;
 }) {
   const [filter, setFilter] = useState<FilterKey>("all");
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const filtered = filter === "all" ? curricula : curricula.filter((c) => c.status === filter);
   const activeCount = curricula.filter((c) => c.status === "active").length;
@@ -190,46 +273,93 @@ export default function MyLearningSection({
     ["done",   "완료"],
   ];
 
-  return (
-    <section>
-      <header className="flex items-end justify-between gap-3 mb-4">
-        <div>
-          <h2 className="text-[20px] font-bold text-ink-900 tracking-tight flex items-center gap-2">
-            <span className="whitespace-nowrap">내 학습</span>
-            <Badge tone="brand">{curricula.length}개</Badge>
-          </h2>
-          <p className="mt-1 text-[13px] text-ink-500">
-            <span className="whitespace-nowrap">진행 중 <b className="text-ink-900 tabular-nums">{activeCount}</b></span>
-            <span className="mx-2 text-ink-300">·</span>
-            <span className="whitespace-nowrap">완료 <b className="text-ink-900 tabular-nums">{doneCount}</b></span>
-            <span className="mx-2 text-ink-300">·</span>
-            <span className="whitespace-nowrap">총 학습 시간 <b className="text-ink-900 tabular-nums">{totalLearningTime}</b></span>
-          </p>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <div className="hidden md:flex items-center gap-0.5 p-0.5 rounded-lg border border-ink-200 bg-white text-[12px] font-medium">
-            {filterLabels.map(([k, l]) => (
-              <button
-                key={k}
-                onClick={() => setFilter(k)}
-                className={`px-2.5 h-7 rounded-md transition whitespace-nowrap inline-flex items-center ${
-                  filter === k ? "bg-ink-100 text-ink-900" : "text-ink-500 hover:text-ink-900"
-                }`}
-              >
-                {l}
-              </button>
-            ))}
-          </div>
-          <Link href="/onboarding" className="h-9 px-3 rounded-lg border border-ink-200 hover:bg-ink-50 text-[12.5px] font-medium text-ink-700 inline-flex items-center gap-1.5 whitespace-nowrap transition">
-            <span aria-hidden>＋</span> <span className="whitespace-nowrap">새 학습 추가</span>
-          </Link>
-        </div>
-      </header>
+  function toggleMenu(id: string) {
+    setOpenMenuId((prev) => (prev === id ? null : id));
+  }
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-        {filtered.map((c) => <CurriculumCard key={c.id} c={c} />)}
-        <NewLearningCard />
-      </div>
-    </section>
+  async function handleDelete() {
+    if (!confirmDeleteId) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/curriculum?id=${confirmDeleteId}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(data.error ?? "삭제에 실패했어요");
+      }
+      setConfirmDeleteId(null);
+      window.location.reload();
+    } catch {
+      setDeleting(false);
+    }
+  }
+
+  return (
+    <>
+      {/* 드롭다운 외부 클릭 닫기 오버레이 */}
+      {openMenuId && (
+        <div
+          className="fixed inset-0 z-10"
+          onClick={() => setOpenMenuId(null)}
+        />
+      )}
+
+      {/* 삭제 확인 모달 */}
+      {confirmDeleteId && (
+        <DeleteModal
+          onConfirm={handleDelete}
+          onCancel={() => { setConfirmDeleteId(null); setDeleting(false); }}
+          deleting={deleting}
+        />
+      )}
+
+      <section>
+        <header className="flex items-end justify-between gap-3 mb-4">
+          <div>
+            <h2 className="text-[20px] font-bold text-ink-900 tracking-tight flex items-center gap-2">
+              <span className="whitespace-nowrap">내 학습</span>
+              <Badge tone="brand">{curricula.length}개</Badge>
+            </h2>
+            <p className="mt-1 text-[13px] text-ink-500">
+              <span className="whitespace-nowrap">진행 중 <b className="text-ink-900 tabular-nums">{activeCount}</b></span>
+              <span className="mx-2 text-ink-300">·</span>
+              <span className="whitespace-nowrap">완료 <b className="text-ink-900 tabular-nums">{doneCount}</b></span>
+              <span className="mx-2 text-ink-300">·</span>
+              <span className="whitespace-nowrap">총 학습 시간 <b className="text-ink-900 tabular-nums">{totalLearningTime}</b></span>
+            </p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="hidden md:flex items-center gap-0.5 p-0.5 rounded-lg border border-ink-200 bg-white text-[12px] font-medium">
+              {filterLabels.map(([k, l]) => (
+                <button
+                  key={k}
+                  onClick={() => setFilter(k)}
+                  className={`px-2.5 h-7 rounded-md transition whitespace-nowrap inline-flex items-center ${
+                    filter === k ? "bg-ink-100 text-ink-900" : "text-ink-500 hover:text-ink-900"
+                  }`}
+                >
+                  {l}
+                </button>
+              ))}
+            </div>
+            <Link href="/onboarding" className="h-9 px-3 rounded-lg border border-ink-200 hover:bg-ink-50 text-[12.5px] font-medium text-ink-700 inline-flex items-center gap-1.5 whitespace-nowrap transition">
+              <span aria-hidden>＋</span> <span className="whitespace-nowrap">새 학습 추가</span>
+            </Link>
+          </div>
+        </header>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+          {filtered.map((c) => (
+            <CurriculumCard
+              key={c.id}
+              c={c}
+              menuOpen={openMenuId === c.id}
+              onMenuToggle={() => toggleMenu(c.id)}
+              onDeleteRequest={() => setConfirmDeleteId(c.id)}
+            />
+          ))}
+          <NewLearningCard />
+        </div>
+      </section>
+    </>
   );
 }

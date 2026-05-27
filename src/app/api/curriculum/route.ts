@@ -3,6 +3,66 @@ import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createAdminClient } from "@/lib/supabase";
 import Anthropic from "@anthropic-ai/sdk";
 
+export async function DELETE(req: NextRequest) {
+  try {
+    const supabase = await createSupabaseServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
+    const url = new URL(req.url);
+    const curriculumId = url.searchParams.get("id");
+    if (!curriculumId) {
+      return NextResponse.json({ error: "id 파라미터가 필요합니다" }, { status: 400 });
+    }
+
+    const admin = createAdminClient();
+
+    // 소유권 확인 + 토픽 ID 목록 조회
+    const { data: curriculum, error: fetchError } = await admin
+      .from("curricula")
+      .select("id, topics")
+      .eq("id", curriculumId)
+      .eq("user_id", user.id)
+      .single();
+
+    if (fetchError || !curriculum) {
+      console.error("[curriculum DELETE] 조회 실패:", fetchError);
+      return NextResponse.json({ error: "커리큘럼을 찾을 수 없어요" }, { status: 404 });
+    }
+
+    // 연관 worksheets 삭제 (topic_id 기준)
+    const topics = (curriculum.topics ?? []) as Array<{ topicId: string }>;
+    const topicIds = topics.map((t) => t.topicId).filter(Boolean);
+    if (topicIds.length > 0) {
+      const { error: wsDeleteError } = await admin
+        .from("worksheets")
+        .delete()
+        .eq("user_id", user.id)
+        .in("topic_id", topicIds);
+      if (wsDeleteError) {
+        console.error("[curriculum DELETE] worksheets 삭제 실패:", wsDeleteError);
+      }
+    }
+
+    // 커리큘럼 삭제
+    const { error: deleteError } = await admin
+      .from("curricula")
+      .delete()
+      .eq("id", curriculumId)
+      .eq("user_id", user.id);
+
+    if (deleteError) {
+      console.error("[curriculum DELETE] 삭제 실패:", deleteError);
+      return NextResponse.json({ error: `[삭제 실패] ${deleteError.message}` }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (e: unknown) {
+    console.error("[curriculum DELETE] 예외:", e);
+    return NextResponse.json({ error: `[예외] ${String(e)}` }, { status: 500 });
+  }
+}
+
 export async function GET(req: NextRequest) {
   try {
     const supabase = await createSupabaseServerClient();

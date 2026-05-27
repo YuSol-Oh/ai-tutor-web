@@ -388,7 +388,7 @@ export default async function Home() {
     return {
       id:         (c.id as string) ?? String(idx),
       emoji:      conf?.emoji ?? "📚",
-      title:      (c.title as string) ?? conf?.label ?? `커리큘럼 ${idx + 1}`,
+      title:      (c.title as string | null) ?? (c.subject as string | null) ?? conf?.label ?? `커리큘럼 ${idx + 1}`,
       subtitle:   `${level} · ${total}개 토픽`,
       accent:     conf?.accent ?? "brand",
       total,
