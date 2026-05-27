@@ -52,6 +52,21 @@ function parseWorksheetFromText(text: string) {
   return null;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function camelCaseWorksheet(ws: Record<string, any>) {
+  return {
+    ...ws,
+    worksheetId: ws.id,
+    topicId: ws.topic_id,
+    topicTitle: ws.topic_title,
+    conceptSummary: ws.concept_summary,
+    realWorldExample: ws.real_world_example,
+    handsOnTask: ws.hands_on_task,
+    userId: ws.user_id,
+    createdAt: ws.created_at,
+  };
+}
+
 export async function GET(req: NextRequest) {
   try {
     const supabase = await createSupabaseServerClient();
@@ -77,41 +92,7 @@ export async function GET(req: NextRequest) {
 
       if (!yesterdayWs) return NextResponse.json({ error: "no yesterday worksheet" }, { status: 404 });
 
-      return NextResponse.json({
-        ...yesterdayWs,
-        worksheetId: yesterdayWs.id,
-        topicId: yesterdayWs.topic_id,
-        topicTitle: yesterdayWs.topic_title,
-        conceptSummary: yesterdayWs.concept_summary,
-        realWorldExample: yesterdayWs.real_world_example,
-        handsOnTask: yesterdayWs.hands_on_task,
-        userId: yesterdayWs.user_id,
-        createdAt: yesterdayWs.created_at,
-      });
-    }
-
-    // 오늘 학습지가 이미 있으면 반환
-    const { data: existing } = await admin
-      .from("worksheets")
-      .select("*")
-      .eq("user_id", user.id)
-      .gte("created_at", `${today}T00:00:00Z`)
-      .limit(1)
-      .single();
-
-    if (existing) {
-      const response = {
-        ...existing,
-        worksheetId: existing.id,
-        topicId: existing.topic_id,
-        topicTitle: existing.topic_title,
-        conceptSummary: existing.concept_summary,
-        realWorldExample: existing.real_world_example,
-        handsOnTask: existing.hands_on_task,
-        userId: existing.user_id,
-        createdAt: existing.created_at,
-      };
-      return NextResponse.json(response);
+      return NextResponse.json(camelCaseWorksheet(yesterdayWs));
     }
 
     // 유저 프로필 조회
@@ -143,6 +124,21 @@ export async function GET(req: NextRequest) {
     }>;
     const currentTopic = topics[profile.current_topic_index];
     if (!currentTopic) return NextResponse.json({ error: "no more topics" }, { status: 404 });
+
+    // 오늘 학습지 조회
+    const { data: existing } = await admin
+      .from("worksheets")
+      .select("*")
+      .eq("user_id", user.id)
+      .gte("created_at", `${today}T00:00:00Z`)
+      .limit(1)
+      .single();
+
+    // 기존 학습지가 있고 현재 토픽과 동일하면 그대로 반환
+    if (existing && existing.topic_id === currentTopic.topicId) {
+      return NextResponse.json(camelCaseWorksheet(existing));
+    }
+    // 토픽이 달라졌으면 새로 생성 (기존 학습지 무시)
 
     // Claude API로 학습지 생성
     const client = new Anthropic();
@@ -233,18 +229,7 @@ export async function GET(req: NextRequest) {
       .single();
 
     if (insertError) return NextResponse.json({ error: insertError.message }, { status: 500 });
-    const response = {
-      ...worksheet,
-      worksheetId: worksheet.id,
-      topicId: worksheet.topic_id,
-      topicTitle: worksheet.topic_title,
-      conceptSummary: worksheet.concept_summary,
-      realWorldExample: worksheet.real_world_example,
-      handsOnTask: worksheet.hands_on_task,
-      userId: worksheet.user_id,
-      createdAt: worksheet.created_at,
-    };
-    return NextResponse.json(response);
+    return NextResponse.json(camelCaseWorksheet(worksheet));
 
   } catch (e: unknown) {
     return NextResponse.json({ error: String(e) }, { status: 500 });

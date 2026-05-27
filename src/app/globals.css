@@ -95,3 +95,24 @@ body {
 .thin-scroll::-webkit-scrollbar { width: 6px; }
 .thin-scroll::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 3px; }
 .thin-scroll::-webkit-scrollbar-track { background: transparent; }
+
+/* Prose table styles */
+.prose table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+}
+.prose th {
+  background-color: #f1f5f9;
+  padding: 8px 12px;
+  text-align: left;
+  font-weight: 600;
+  border: 1px solid #e2e8f0;
+}
+.prose td {
+  padding: 8px 12px;
+  border: 1px solid #e2e8f0;
+}
+.prose tr:nth-child(even) {
+  background-color: #f8fafc;
+}

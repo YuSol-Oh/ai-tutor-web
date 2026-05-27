@@ -3,6 +3,7 @@
 import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { Worksheet, Question, HandsOnTask } from "@/types";
 
 // ─── Extended API type ────────────────────────────────────────────────────────
@@ -231,7 +232,7 @@ function LeftPanel({ worksheet }: { worksheet: WorksheetData | null }) {
               <span>핵심 개념</span>
             </h2>
             <div className="mt-3 prose prose-sm max-w-none text-ink-700 [&_strong]:text-ink-900 [&_code]:text-brand-700 [&_code]:bg-brand-50 [&_code]:px-1 [&_code]:rounded">
-              <ReactMarkdown>{worksheet.conceptSummary}</ReactMarkdown>
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{worksheet.conceptSummary}</ReactMarkdown>
             </div>
           </section>
 
@@ -242,7 +243,7 @@ function LeftPanel({ worksheet }: { worksheet: WorksheetData | null }) {
                 <span>실무 예시</span>
               </div>
               <div className="mt-2 text-[13px] text-brand-900/80 leading-relaxed prose prose-sm max-w-none [&_pre]:bg-white/80 [&_pre]:border [&_pre]:border-brand-100 [&_pre]:rounded-lg [&_pre]:p-3 [&_pre]:text-[12px] [&_code]:text-brand-700 [&_strong]:text-brand-900">
-                <ReactMarkdown>{worksheet.realWorldExample}</ReactMarkdown>
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{worksheet.realWorldExample}</ReactMarkdown>
               </div>
             </div>
           </section>
