@@ -7,22 +7,46 @@ function parseWorksheetFromText(text: string) {
   // 전략 1: ```json ... ``` 펜스드 블록 추출
   const fenceMatch = text.match(/```json\s*([\s\S]*?)\s*```/);
   if (fenceMatch) {
-    try { return JSON.parse(fenceMatch[1]); } catch {}
+    try {
+      const result = JSON.parse(fenceMatch[1]);
+      console.log("[파싱 성공] 전략 1");
+      return result;
+    } catch (e: unknown) {
+      console.log("[파싱 실패 원인]", e instanceof Error ? e.message : String(e));
+    }
   }
 
   // 전략 2: ``` ... ``` 펜스드 블록 추출 (json 없이)
   const fenceMatch2 = text.match(/```\s*([\s\S]*?)\s*```/);
   if (fenceMatch2) {
-    try { return JSON.parse(fenceMatch2[1]); } catch {}
+    try {
+      const result = JSON.parse(fenceMatch2[1]);
+      console.log("[파싱 성공] 전략 2");
+      return result;
+    } catch (e: unknown) {
+      console.log("[파싱 실패 원인]", e instanceof Error ? e.message : String(e));
+    }
   }
 
   // 전략 3: 직접 JSON.parse
-  try { return JSON.parse(text); } catch {}
+  try {
+    const result = JSON.parse(text);
+    console.log("[파싱 성공] 전략 3");
+    return result;
+  } catch (e: unknown) {
+    console.log("[파싱 실패 원인]", e instanceof Error ? e.message : String(e));
+  }
 
   // 전략 4: 첫 번째 { ... } 추출
   const braceMatch = text.match(/\{[\s\S]*\}/);
   if (braceMatch) {
-    try { return JSON.parse(braceMatch[0]); } catch {}
+    try {
+      const result = JSON.parse(braceMatch[0]);
+      console.log("[파싱 성공] 전략 4");
+      return result;
+    } catch (e: unknown) {
+      console.log("[파싱 실패 원인]", e instanceof Error ? e.message : String(e));
+    }
   }
 
   return null;
@@ -145,6 +169,10 @@ export async function GET(req: NextRequest) {
 - hints[0]: 방향만 살짝 제시
 - hints[1]: 핵심 키워드 언급
 - hints[2]: 거의 답에 가까운 힌트
+
+## conceptSummary 작성 규칙
+- 마크다운 문법 사용 금지 (볼드(**), 헤더(###), 리스트(-) 등)
+- 순수 텍스트로 500자 이내 작성
 
 ## 출력 형식 (JSON만 출력)
 {
