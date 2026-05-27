@@ -41,7 +41,8 @@ export async function POST(req: NextRequest) {
     const { feedback } = await req.json();
     const admin = createAdminClient();
 
-    const { data: curriculum, error } = await admin
+    // ── 커리큘럼 조회 ────────────────────────────────────────────────────────────
+    const { data: curriculum, error: fetchError } = await admin
       .from("curricula")
       .select("*")
       .eq("user_id", user.id)
@@ -49,8 +50,15 @@ export async function POST(req: NextRequest) {
       .limit(1)
       .single();
 
-    if (error || !curriculum) return NextResponse.json({ error: "curriculum not found" }, { status: 404 });
+    if (fetchError || !curriculum) {
+      console.error("[curriculum POST] 커리큘럼 조회 실패:", fetchError);
+      return NextResponse.json(
+        { error: `[커리큘럼 조회 실패] ${fetchError?.message ?? "데이터 없음"}` },
+        { status: 404 }
+      );
+    }
 
+    // ── Claude API 호출 ──────────────────────────────────────────────────────────
     const client = new Anthropic();
     const prompt = `아래는 현재 커리큘럼이에요.
 ${JSON.stringify(curriculum.topics, null, 2)}
@@ -64,25 +72,45 @@ ${JSON.stringify(curriculum.topics, null, 2)}
   "changes": ["변경사항 1", "변경사항 2", "변경사항 3"]
 }`;
 
-    const message = await client.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 2000,
-      messages: [{ role: "user", content: prompt }],
-    });
-
-    const text = message.content[0].type === "text" ? message.content[0].text : "";
-    let parsed: { topics: unknown[]; summary?: string; changes?: string[] };
+    let message;
     try {
-      parsed = JSON.parse(text);
-    } catch {
-      const match = text.match(/```json\n?([\s\S]*?)\n?```/);
-      if (!match) return NextResponse.json({ error: "파싱 실패: " + text }, { status: 500 });
-      parsed = JSON.parse(match[1]);
+      message = await client.messages.create({
+        model: "claude-sonnet-4-6",
+        max_tokens: 4096,
+        messages: [{ role: "user", content: prompt }],
+      });
+    } catch (e) {
+      console.error("[curriculum POST] Claude API 오류:", e);
+      return NextResponse.json({ error: `[Claude API 오류] ${String(e)}` }, { status: 500 });
+    }
+
+    // ── 응답 파싱 (3단계 전략) ───────────────────────────────────────────────────
+    const text = message.content[0].type === "text" ? message.content[0].text : "";
+    let parsed: { topics: unknown[]; summary?: string; changes?: string[] } | undefined;
+
+    try { parsed = JSON.parse(text); } catch {}
+
+    if (!parsed) {
+      const fenced = text.match(/```(?:json)?\n?([\s\S]*?)\n?```/);
+      if (fenced) { try { parsed = JSON.parse(fenced[1]); } catch {} }
+    }
+
+    if (!parsed) {
+      const objMatch = text.match(/\{[\s\S]*\}/);
+      if (objMatch) { try { parsed = JSON.parse(objMatch[0]); } catch {} }
+    }
+
+    if (!parsed?.topics) {
+      console.error("[curriculum POST] 파싱 실패. Claude 응답:", text.slice(0, 500));
+      return NextResponse.json(
+        { error: `[파싱 실패] Claude 응답을 JSON으로 읽을 수 없어요. 응답: ${text.slice(0, 300)}` },
+        { status: 500 }
+      );
     }
 
     const { topics, summary: revisionSummary, changes: revisionChanges } = parsed;
-    if (!topics) return NextResponse.json({ error: "토픽 생성 실패" }, { status: 500 });
 
+    // ── DB 업데이트 ───────────────────────────────────────────────────────────────
     const adjustmentHistory = [
       ...(curriculum.adjustment_history || []),
       { date: new Date().toISOString(), reason: `사용자 피드백: ${feedback}` },
@@ -100,7 +128,14 @@ ${JSON.stringify(curriculum.topics, null, 2)}
       .select()
       .single();
 
-    if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
+    if (updateError) {
+      console.error("[curriculum POST] DB 업데이트 실패:", updateError);
+      return NextResponse.json(
+        { error: `[DB 업데이트 실패] ${updateError.message}` },
+        { status: 500 }
+      );
+    }
+
     return NextResponse.json({
       ...updated,
       topics: updated.topics,
@@ -113,6 +148,7 @@ ${JSON.stringify(curriculum.topics, null, 2)}
       revisionChanges: revisionChanges ?? [],
     });
   } catch (e: unknown) {
-    return NextResponse.json({ error: String(e) }, { status: 500 });
+    console.error("[curriculum POST] 예상치 못한 예외:", e);
+    return NextResponse.json({ error: `[예외] ${String(e)}` }, { status: 500 });
   }
 }
